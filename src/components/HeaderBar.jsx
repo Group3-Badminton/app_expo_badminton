@@ -4,7 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIcon }) => {
+export const HeaderBar = ({
+  title,
+  subtitle,
+  showBack = false,
+  onBack,
+  rightAction,
+  onRightPress,
+  rightIcon,
+}) => {
   const insets = useSafeAreaInsets();
   const safeTopPadding = Math.max(
     insets.top,
@@ -13,6 +21,19 @@ export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIco
 
   return (
     <View style={[styles.container, { paddingTop: safeTopPadding }]}>
+      {showBack ? (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onBack}
+          style={styles.backButton}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={THEME.colors.textPrimary}
+          />
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.titleWrapper}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -46,6 +67,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: THEME.radius.full,
+    backgroundColor: THEME.colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: THEME.spacing.sm,
+    ...THEME.shadows.card,
   },
   titleWrapper: {
     flex: 1,

@@ -140,33 +140,6 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Feature Highlights Grid */}
-        <View style={styles.featuresRow}>
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#ECFDF5' }]}>
-              <Ionicons name="time-outline" size={20} color={THEME.colors.primary} />
-            </View>
-            <Text style={styles.featureTitle}>Giữ chỗ tức thì</Text>
-            <Text style={styles.featureDesc}>Xác nhận trong 1 phút</Text>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <Ionicons name="pricetag-outline" size={20} color="#3B82F6" />
-            </View>
-            <Text style={styles.featureTitle}>Ưu đãi Voucher</Text>
-            <Text style={styles.featureDesc}>Giảm giá giờ thấp điểm</Text>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={[styles.featureIconBox, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="qr-code-outline" size={20} color="#8B5CF6" />
-            </View>
-            <Text style={styles.featureTitle}>Check-in QR</Text>
-            <Text style={styles.featureDesc}>Tiện lợi tại quầy sân</Text>
-          </View>
-        </View>
-
         {/* Danh sách Sân cầu lông */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Danh sách sân cầu lông</Text>
@@ -187,20 +160,37 @@ export default function HomeScreen({ navigation }) {
           </View>
         ) : (
           (Array.isArray(courts) ? courts : []).map((court, index) => {
-            const courtName = court.name || `Sân ${court.courtNumber || index + 1}`;
-            const courtType = court.type || 'Sân tiêu chuẩn';
-            const price = court.pricePerHour || court.basePrice || 80000;
-            const isAvailable = court.status !== 'Maintenance' && court.status !== 'Inactive';
+            const courtName = court.courtName || court.name || `Sân ${court.courtNumber || index + 1}`;
+            const rawType = (court.courtType || court.type || 'STANDARD').toUpperCase();
+            const isVip = rawType.includes('VIP');
+            const isPremium = rawType.includes('PREMIUM') || rawType.includes('THI ĐẤU');
+            const courtType = isVip ? 'Sân VIP' : isPremium ? 'Sân Thi Đấu' : 'Sân tiêu chuẩn';
+            const defaultPrice = isVip ? 130000 : isPremium ? 160000 : 80000;
+            const price = court.pricePerHour || court.basePrice || defaultPrice;
+            const isInactive = court.status === 'INACTIVE' || court.status === 'Inactive' || court.operationalStatus === 'MAINTENANCE';
+            const isAvailable = !isInactive;
+            const statusLabel = court.operationalStatus === 'MAINTENANCE' ? 'Bảo trì' : !isAvailable ? 'Tạm đóng' : 'Sẵn sàng';
 
             return (
               <View key={court._id || index} style={styles.courtCard}>
                 <View style={styles.courtHeader}>
-                  <View style={styles.courtBadgeCircle}>
-                    <Ionicons name="tennisball" size={20} color={THEME.colors.primary} />
+                  <View style={[styles.courtBadgeCircle, isVip && styles.courtBadgeVip, isPremium && styles.courtBadgePremium]}>
+                    <Ionicons
+                      name={isVip ? 'sparkles' : isPremium ? 'trophy' : 'tennisball'}
+                      size={20}
+                      color={isVip ? '#B45309' : isPremium ? '#7E22CE' : THEME.colors.primary}
+                    />
                   </View>
                   <View style={styles.courtInfo}>
-                    <Text style={styles.courtName}>{courtName}</Text>
-                    <Text style={styles.courtType}>{courtType}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.courtName}>{courtName}</Text>
+                      {isVip && (
+                        <View style={styles.vipTag}>
+                          <Text style={styles.vipTagText}>VIP</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.courtType, isVip && styles.courtTypeVip]}>{courtType}</Text>
                   </View>
                   <View
                     style={[
@@ -214,7 +204,7 @@ export default function HomeScreen({ navigation }) {
                         { color: isAvailable ? THEME.colors.primary : THEME.colors.danger },
                       ]}
                     >
-                      {isAvailable ? 'Sẵn sàng' : 'Bảo trì'}
+                      {statusLabel}
                     </Text>
                   </View>
                 </View>
@@ -261,7 +251,6 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.borderLight,
-    marginTop:20
   },
   greeting: {
     fontSize: 13,
@@ -472,6 +461,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: THEME.colors.primaryDark,
+  },
+  courtBadgeVip: {
+    backgroundColor: '#FEF3C7',
+  },
+  courtBadgePremium: {
+    backgroundColor: '#F3E8FF',
+  },
+  vipTag: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  vipTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  courtTypeVip: {
+    color: '#D97706',
+    fontWeight: '600',
   },
   bookBtn: {
     backgroundColor: THEME.colors.primary,

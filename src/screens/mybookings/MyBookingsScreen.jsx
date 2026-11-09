@@ -98,7 +98,18 @@ export default function MyBookingsScreen({ navigation }) {
   if (!isAuthenticated) {
     return (
       <View style={styles.container}>
-        <HeaderBar title="Lịch đặt sân" subtitle="Quản lý và tra cứu vé đặt sân" />
+        <HeaderBar
+          title="Lịch đặt sân"
+          subtitle="Quản lý và tra cứu vé đặt sân"
+          showBack={true}
+          onBack={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }}
+        />
         <View style={styles.emptyContainer}>
           <Ionicons name="lock-closed-outline" size={56} color={THEME.colors.textMuted} />
           <Text style={styles.emptyTitle}>Chưa đăng nhập</Text>
@@ -120,6 +131,14 @@ export default function MyBookingsScreen({ navigation }) {
       <HeaderBar
         title="Lịch đặt sân"
         subtitle="Quản lý vé và mã check-in tại sân"
+        showBack={true}
+        onBack={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Home');
+          }
+        }}
         rightIcon="refresh"
         onRightPress={fetchBookings}
       />

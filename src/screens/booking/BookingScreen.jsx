@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Modal,
 } from 'react-native';
 import dayjs from 'dayjs';
 import { THEME } from '../../utils/theme';
@@ -65,6 +66,69 @@ export default function BookingScreen({ route, navigation }) {
     const s = getInitialStartTimeForDate(dayjs().format('YYYY-MM-DD'));
     return formatMinutesToTime(Math.min(23 * 60, parseTimeToMinutes(s) + 60));
   });
+  // Modal chọn giờ: 'START' hoặc 'END' hoặc null
+  const [pickerModalType, setPickerModalType] = useState(null);
+  const [tempHour, setTempHour] = useState('08');
+  const [tempMinute, setTempMinute] = useState('00');
+
+  const openTimePicker = (type) => {
+    const currentVal = type === 'START' ? startTime : endTime;
+    const [h, m] = currentVal.split(':');
+    setTempHour(h || '08');
+    setTempMinute(m || '00');
+    setPickerModalType(type);
+  };
+
+  const handleConfirmPickerTime = () => {
+    const pickedTime = `${tempHour}:${tempMinute}`;
+    if (pickerModalType === 'START') {
+      handleStartTimeChange(pickedTime);
+    } else if (pickerModalType === 'END') {
+      const sMin = parseTimeToMinutes(startTime);
+      const eMin = parseTimeToMinutes(pickedTime);
+      if (eMin < sMin + 60) {
+        Alert.alert('Khung giờ không hợp lệ', 'Giờ kết thúc phải sau giờ bắt đầu ít nhất 1 tiếng (60 phút)!');
+        return;
+      }
+      setEndTime(pickedTime);
+    }
+    setPickerModalType(null);
+  };
+
+  const setPickerNow = () => {
+    const now = dayjs();
+    const h = String(now.hour()).padStart(2, '0');
+    const m = now.minute();
+    const roundedM = m < 15 ? '15' : m < 30 ? '30' : m < 45 ? '45' : '00';
+    const finalH = roundedM === '00' && m >= 45 ? String(Math.min(23, Number(h) + 1)).padStart(2, '0') : h;
+    setTempHour(finalH);
+    setTempMinute(roundedM);
+  };
+  // Kiểm tra một giờ bất kỳ có bị kín/trùng lịch đã đặt hay không
+  const isHourBooked = useCallback((hourStr) => {
+    const h = Number(hourStr);
+    const hStartMin = h * 60;
+    const hEndMin = (h + 1) * 60;
+    return bookedRanges.some((r) => {
+      const bStart = parseTimeToMinutes(r.startTime);
+      const bEnd = parseTimeToMinutes(r.endTime);
+      return Math.max(hStartMin, bStart) < Math.min(hEndMin, bEnd);
+    });
+  }, [bookedRanges]);
+
+  // Kiểm tra một mốc thời gian cụ thể (giờ + phút) có bị trùng lịch đã đặt hay không
+  const isTimeSlotBooked = useCallback((hourStr, minuteStr) => {
+    const min = Number(hourStr) * 60 + Number(minuteStr);
+    return bookedRanges.some((r) => {
+      const bStart = parseTimeToMinutes(r.startTime);
+      const bEnd = parseTimeToMinutes(r.endTime);
+      if (pickerModalType === 'END') {
+        return min > bStart && min <= bEnd;
+      }
+      return min >= bStart && min < bEnd;
+    });
+  }, [bookedRanges, pickerModalType]);
+
 
   // Tình trạng lịch đã đặt của sân trong ngày (Chống đặt trùng)
   const [bookedRanges, setBookedRanges] = useState([]);
@@ -215,7 +279,9 @@ export default function BookingScreen({ route, navigation }) {
     } catch (err) {
       // Fallback tính giá cơ bản nếu API tính tiền gặp ngoại lệ
       const selectedCourt = courts.find((c) => c._id === selectedCourtId);
-      const baseHourly = selectedCourt?.pricePerHour || selectedCourt?.basePrice || 80000;
+      const rawType = (selectedCourt?.courtType || selectedCourt?.type || 'STANDARD').toUpperCase();
+      const defaultPrice = rawType.includes('VIP') ? 130000 : rawType.includes('PREMIUM') ? 160000 : 80000;
+      const baseHourly = selectedCourt?.pricePerHour || selectedCourt?.basePrice || defaultPrice;
       const hours = (eMin - sMin) / 60;
       const total = Math.round(hours * baseHourly);
       const discount = appliedVoucher
@@ -425,28 +491,39 @@ export default function BookingScreen({ route, navigation }) {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courtScroll}>
               {(Array.isArray(courts) ? courts : []).map((court) => {
                 const isSelected = selectedCourtId === court._id;
-                const courtName = court.name || court.courtName || `Sân ${court.courtNumber}`;
-                const price = court.pricePerHour || court.basePrice || 80000;
-
+                const courtName = court.courtName || court.name || `Sân ${court.courtNumber}`;
+                const rawType = (court.courtType || court.type || 'STANDARD').toUpperCase();
+                const isVip = rawType.includes('VIP');
+                const defaultPrice = isVip ? 130000 : rawType.includes('PREMIUM') ? 160000 : 80000;
+                const price = court.pricePerHour || court.basePrice || defaultPrice;
+                const isInactive = court.status === 'INACTIVE' || court.status === 'Inactive' || court.operationalStatus === 'MAINTENANCE';
                 return (
                   <TouchableOpacity
                     key={court._id}
-                    activeOpacity={0.8}
-                    style={[styles.courtSelectCard, isSelected && styles.courtSelectCardActive]}
+                    activeOpacity={isInactive ? 1 : 0.8}
+                    disabled={isInactive}
+                    style={[styles.courtSelectCard, isSelected && styles.courtSelectCardActive, isInactive && { opacity: 0.55, backgroundColor: '#F3F4F6' }]}
                     onPress={() => setSelectedCourtId(court._id)}
                   >
-                    <View style={[styles.courtIconCircle, isSelected && styles.courtIconCircleActive]}>
+                    <View style={[styles.courtIconCircle, isSelected && styles.courtIconCircleActive, !isSelected && isVip && { backgroundColor: '#FEF3C7' }]}>
                       <Ionicons
-                        name="tennisball"
+                        name={isVip ? 'sparkles' : 'tennisball'}
                         size={18}
-                        color={isSelected ? '#FFFFFF' : THEME.colors.primary}
+                        color={isSelected ? '#FFFFFF' : isVip ? '#B45309' : THEME.colors.primary}
                       />
                     </View>
-                    <Text style={[styles.courtSelectName, isSelected && styles.courtSelectNameActive]}>
-                      {courtName}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={[styles.courtSelectName, isSelected && styles.courtSelectNameActive]}>
+                        {courtName}
+                      </Text>
+                      {isVip && (
+                        <View style={{ backgroundColor: isSelected ? '#FFFFFF' : '#FEF3C7', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '700', color: isSelected ? THEME.colors.primaryDark : '#B45309' }}>VIP</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[styles.courtSelectPrice, isSelected && styles.courtSelectPriceActive]}>
-                      {formatCurrency(price)}/h
+                      {isInactive ? (court.operationalStatus === 'MAINTENANCE' ? 'Đang bảo trì' : 'Tạm đóng') : `${formatCurrency(price)}/h`}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -526,92 +603,33 @@ export default function BookingScreen({ route, navigation }) {
           ) : null}
 
           <View style={styles.timeSelectorCard}>
-            <View style={styles.timeSelectRow}>
-              <View style={styles.timeSelectBlock}>
-                <View style={styles.timeHeaderRow}>
-                  <Text style={styles.timeSelectLabel}>Giờ bắt đầu</Text>
-                  <Text style={styles.timeSelectedValue}>{startTime}</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeChipScroll}>
-                  {availableStartSlots.map((t) => {
-                    const isSelected = startTime === t;
-                    // Kiểm tra xem mốc này có rơi vào khoảng đã đặt không
-                    const tMin = parseTimeToMinutes(t);
-                    const isSlotBooked = bookedRanges.some((r) => {
-                      const bStart = parseTimeToMinutes(r.startTime);
-                      const bEnd = parseTimeToMinutes(r.endTime);
-                      return tMin >= bStart && tMin < bEnd;
-                    });
+            {/* Cụm input chọn giờ phong cách Ant Design TimePicker */}
+            <View style={styles.timePickerRow}>
+              <View style={styles.timePickerCol}>
+                <Text style={styles.timeFieldLabel}>Giờ bắt đầu:</Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.timeInputBox}
+                  onPress={() => openTimePicker('START')}
+                >
+                  <Text style={styles.timeInputValue}>{startTime}</Text>
+                  <Ionicons name="time-outline" size={18} color="#059669" />
+                </TouchableOpacity>
+              </View>
 
-                    return (
-                      <TouchableOpacity
-                        key={`start-${t}`}
-                        style={[
-                          styles.timeChip,
-                          isSelected && styles.timeChipActive,
-                          isSlotBooked && styles.timeChipBooked,
-                        ]}
-                        onPress={() => handleStartTimeChange(t)}
-                      >
-                        <Text
-                          style={[
-                            styles.timeChipText,
-                            isSelected && styles.timeChipTextActive,
-                            isSlotBooked && styles.timeChipTextBooked,
-                          ]}
-                        >
-                          {t}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+              <View style={styles.timePickerCol}>
+                <Text style={styles.timeFieldLabel}>Giờ kết thúc:</Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.timeInputBox}
+                  onPress={() => openTimePicker('END')}
+                >
+                  <Text style={styles.timeInputValue}>{endTime}</Text>
+                  <Ionicons name="time-outline" size={18} color="#059669" />
+                </TouchableOpacity>
               </View>
             </View>
 
-            <View style={styles.timeSelectDivider} />
-
-            <View style={styles.timeSelectRow}>
-              <View style={styles.timeSelectBlock}>
-                <View style={styles.timeHeaderRow}>
-                  <Text style={styles.timeSelectLabel}>Giờ kết thúc (≥ 1 tiếng)</Text>
-                  <Text style={styles.timeSelectedValue}>{endTime} ({durationHours}h)</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeChipScroll}>
-                  {availableEndSlots.map((t) => {
-                    const isSelected = endTime === t;
-                    const tMin = parseTimeToMinutes(t);
-                    const isSlotBooked = bookedRanges.some((r) => {
-                      const bStart = parseTimeToMinutes(r.startTime);
-                      const bEnd = parseTimeToMinutes(r.endTime);
-                      return tMin > bStart && tMin <= bEnd;
-                    });
-
-                    return (
-                      <TouchableOpacity
-                        key={`end-${t}`}
-                        style={[
-                          styles.timeChip,
-                          isSelected && styles.timeChipActive,
-                          isSlotBooked && styles.timeChipBooked,
-                        ]}
-                        onPress={() => setEndTime(t)}
-                      >
-                        <Text
-                          style={[
-                            styles.timeChipText,
-                            isSelected && styles.timeChipTextActive,
-                            isSlotBooked && styles.timeChipTextBooked,
-                          ]}
-                        >
-                          {t}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
           </View>
         </View>
 
@@ -734,6 +752,122 @@ export default function BookingScreen({ route, navigation }) {
           />
         </View>
       </ScrollView>
+      {/* Modal chọn khung giờ dạng 2 cột Giờ và Phút phong cách Ant Design */}
+      <Modal
+        visible={pickerModalType !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerModalType(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.timePickerModalCard}>
+            <View style={styles.timePickerModalHeader}>
+              <View>
+                <Text style={styles.timePickerModalTitle}>
+                  {pickerModalType === 'START' ? 'Chọn giờ bắt đầu' : 'Chọn giờ kết thúc'}
+                </Text>
+                <Text style={styles.timePickerModalSubtitle}>Đang chọn: {tempHour}:{tempMinute}</Text>
+                {bookedRanges.length > 0 && (
+                  <Text style={{ fontSize: 11, color: '#DC2626', marginTop: 3, fontWeight: '500' }}>
+                    ● Màu đỏ: Giờ/mốc đã có khách đặt
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setPickerModalType(null)} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 2 cột Giờ và Phút */}
+            <View style={styles.pickerColumnsContainer}>
+              {/* Cột 1: GIỜ (05h -> 23h) */}
+              <View style={styles.pickerColumn}>
+                <Text style={styles.pickerColumnLabel}>Giờ</Text>
+                <ScrollView style={styles.pickerScrollList} showsVerticalScrollIndicator>
+                  {Array.from({ length: 19 }, (_, i) => String(i + 5).padStart(2, '0')).map((h) => {
+                    const isHourSelected = tempHour === h;
+                    const isBooked = isHourBooked(h);
+                    return (
+                      <TouchableOpacity
+                        key={`h-${h}`}
+                        style={[
+                          styles.pickerItem,
+                          isBooked && styles.pickerItemBooked,
+                          isHourSelected && styles.pickerItemActive,
+                        ]}
+                        onPress={() => setTempHour(h)}
+                      >
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            isBooked && styles.pickerItemTextBooked,
+                            isHourSelected && styles.pickerItemTextActive,
+                          ]}
+                        >
+                          {h} {isBooked ? '●' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Cột 2: PHÚT (00, 15, 30, 45) */}
+              <View style={styles.pickerColumn}>
+                <Text style={styles.pickerColumnLabel}>Phút</Text>
+                <ScrollView style={styles.pickerScrollList} showsVerticalScrollIndicator>
+                  {['00', '15', '30', '45'].map((m) => {
+                    const isMinuteSelected = tempMinute === m;
+                    const isBooked = isTimeSlotBooked(tempHour, m);
+                    return (
+                      <TouchableOpacity
+                        key={`m-${m}`}
+                        style={[
+                          styles.pickerItem,
+                          isBooked && styles.pickerItemBooked,
+                          isMinuteSelected && styles.pickerItemActive,
+                        ]}
+                        onPress={() => setTempMinute(m)}
+                      >
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            isBooked && styles.pickerItemTextBooked,
+                            isMinuteSelected && styles.pickerItemTextActive,
+                          ]}
+                        >
+                          {m} {isBooked ? '●' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* Footer hành động: Nút Now và Nút Xác nhận */}
+            <View style={styles.pickerModalFooter}>
+              <TouchableOpacity style={styles.pickerNowBtn} onPress={setPickerNow}>
+                <Text style={styles.pickerNowText}>Now</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  style={styles.pickerCancelBtn}
+                  onPress={() => setPickerModalType(null)}
+                >
+                  <Text style={styles.pickerCancelText}>Đóng</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pickerConfirmBtn}
+                  onPress={handleConfirmPickerTime}
+                >
+                  <Text style={styles.pickerConfirmText}>Xác nhận</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1108,5 +1242,168 @@ const styles = StyleSheet.create({
   },
   confirmBtnDisabled: {
     backgroundColor: '#9CA3AF',
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
+  },
+  timePickerCol: {
+    flex: 1,
+  },
+  timeFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: THEME.colors.textSecondary,
+    marginBottom: 6,
+  },
+  timeInputBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  timeInputValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  timePickerModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 320,
+    padding: 16,
+    ...THEME.shadows.card,
+  },
+  timePickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  timePickerModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  timePickerModalSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  pickerColumnsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    height: 220,
+  },
+  pickerColumn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
+  },
+  pickerColumnLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'center',
+    paddingVertical: 6,
+    backgroundColor: '#F1F5F9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  pickerScrollList: {
+    flex: 1,
+    padding: 4,
+  },
+  pickerItem: {
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  pickerItemActive: {
+    backgroundColor: '#059669',
+  },
+  pickerItemBooked: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  pickerItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  pickerItemTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  pickerItemTextBooked: {
+    color: '#DC2626',
+    fontWeight: '700',
+    textDecorationLine: 'line-through',
+  },
+  pickerModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  pickerNowBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  pickerNowText: {
+    color: '#059669',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  pickerCancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  pickerCancelText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  pickerConfirmBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#059669',
+  },
+  pickerConfirmText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

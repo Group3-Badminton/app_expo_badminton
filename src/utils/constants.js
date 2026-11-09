@@ -1,7 +1,7 @@
 // Các hằng số dùng chung trong ứng dụng Mobile
 // Cổng Backend trong file .env của api_express_badminton là 9999
-// IP máy tính hiện tại là 10.10.122.186 để BlueStacks và thiết bị thật kết nối được
-export const API_BASE_URL = 'http://10.10.122.186:9999/api';
+// IP Wi-Fi hiện tại của máy tính: 192.168.101.116
+export const API_BASE_URL = 'http://192.168.101.116:9999/api';
 export const API_FALLBACK_URL = 'http://localhost:9999/api';
 
 export const STORAGE_KEYS = {

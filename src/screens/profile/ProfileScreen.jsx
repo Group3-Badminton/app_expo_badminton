@@ -249,30 +249,6 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Cụm Thông Tin Hệ Thống */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionHeader}>Hỗ trợ & Ứng dụng</Text>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Phiên bản ứng dụng</Text>
-            <Text style={styles.infoValue}>1.0.0 (Expo Mobile)</Text>
-          </View>
-
-          <View style={styles.menuDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Giờ mở cửa cụm sân</Text>
-            <Text style={styles.infoValue}>06:00 - 23:00 hàng ngày</Text>
-          </View>
-
-          <View style={styles.menuDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Hotline hỗ trợ</Text>
-            <Text style={styles.infoValue}>1900 8888</Text>
-          </View>
-        </View>
-
         {/* Nút Đăng xuất */}
         {isAuthenticated ? (
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
