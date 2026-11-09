@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -62,10 +63,15 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnreadCount();
+    }, [fetchUnreadCount])
+  );
+
   useEffect(() => {
     fetchCourts();
-    fetchUnreadCount();
-  }, [fetchCourts, fetchUnreadCount]);
+  }, [fetchCourts]);
 
   const onRefresh = () => {
     setRefreshing(true);

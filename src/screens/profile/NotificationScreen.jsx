@@ -34,10 +34,14 @@ export default function NotificationScreen({ navigation }) {
       const res = await notificationService.getMyNotifications({ limit: 50 });
       const list = Array.isArray(res)
         ? res
-        : Array.isArray(res?.data)
-        ? res.data
+        : Array.isArray(res?.data?.items)
+        ? res.data.items
+        : Array.isArray(res?.items)
+        ? res.items
         : Array.isArray(res?.data?.notifications)
         ? res.data.notifications
+        : Array.isArray(res?.data)
+        ? res.data
         : Array.isArray(res?.notifications)
         ? res.notifications
         : [];
