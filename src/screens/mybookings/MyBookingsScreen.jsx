@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.xxl,
+    paddingBottom: 110,
   },
   card: {
     backgroundColor: THEME.colors.surface,
