@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../../utils/theme';
 import { formatCurrency } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +20,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen({ navigation }) {
   const { user, isAuthenticated } = useAuth();
+  const insets = useSafeAreaInsets();
+  const safeTopPadding = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 30) : 0
+  ) + 16;
+
   const [courts, setCourts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,7 +76,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Top Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: safeTopPadding }]}>
         <View>
           <Text style={styles.greeting}>Xin chào 👋</Text>
           <Text style={styles.userName}>
@@ -294,7 +303,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.xxl,
+    paddingBottom: 110,
   },
   heroBanner: {
     backgroundColor: THEME.colors.primary,

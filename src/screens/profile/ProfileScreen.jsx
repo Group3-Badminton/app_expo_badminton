@@ -171,11 +171,26 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.userInfo}>
               <Text style={styles.userName}>Chưa đăng nhập</Text>
               <Text style={styles.userEmail}>Đăng nhập để lưu và quản lý đơn đặt sân</Text>
-              <Button
-                title="Đăng nhập / Đăng ký"
-                onPress={() => navigation.navigate('Login')}
-                style={styles.authBtn}
-              />
+              
+              <View style={styles.authButtonGroup}>
+                <TouchableOpacity
+                  style={styles.loginBtnPrimary}
+                  onPress={() => navigation.navigate('Login')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="log-in-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.loginBtnText}>Đăng nhập</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.registerBtnOutline}
+                  onPress={() => navigation.navigate('Register')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="person-add-outline" size={18} color={THEME.colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={styles.registerBtnText}>Đăng ký</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
@@ -347,7 +362,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.xxl,
+    paddingBottom: 110,
   },
   profileCard: {
     backgroundColor: THEME.colors.surface,
@@ -447,6 +462,46 @@ const styles = StyleSheet.create({
     marginTop: THEME.spacing.md,
     width: 200,
     height: 44,
+  },
+  authButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: THEME.spacing.lg,
+    width: '100%',
+    paddingHorizontal: THEME.spacing.xs,
+  },
+  loginBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME.colors.primary,
+    paddingVertical: 12,
+    borderRadius: THEME.radius.lg,
+    ...THEME.shadows.card,
+  },
+  loginBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  registerBtnOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME.colors.surface,
+    borderWidth: 1.5,
+    borderColor: THEME.colors.primary,
+    paddingVertical: 11,
+    borderRadius: THEME.radius.lg,
+  },
+  registerBtnText: {
+    color: THEME.colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
   },
   sectionCard: {
     backgroundColor: THEME.colors.surface,

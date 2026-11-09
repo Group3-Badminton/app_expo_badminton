@@ -1,11 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../utils/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIcon }) => {
+  const insets = useSafeAreaInsets();
+  const safeTopPadding = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 30) : 0
+  ) + 16;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: safeTopPadding }]}>
       <View style={styles.titleWrapper}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -26,7 +33,6 @@ export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIco
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: THEME.spacing.lg,
-    paddingTop: THEME.spacing.md,
     paddingBottom: THEME.spacing.sm,
     backgroundColor: THEME.colors.background,
     flexDirection: 'row',
