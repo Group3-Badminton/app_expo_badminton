@@ -252,6 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.borderLight,
+    marginTop:20
   },
   greeting: {
     fontSize: 13,
@@ -290,7 +291,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   profileBtn: {
-    padding: 2,
+    padding: 2, 
   },
   scrollContent: {
     padding: THEME.spacing.lg,

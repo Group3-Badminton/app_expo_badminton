@@ -1,9 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { THEME } from '../utils/theme';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { THEME } from "../utils/theme";
+import { Ionicons } from "@expo/vector-icons";
 
-export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIcon }) => {
+export const HeaderBar = ({
+  title,
+  subtitle,
+  rightAction,
+  onRightPress,
+  rightIcon,
+}) => {
   return (
     <View style={styles.container}>
       <View style={styles.titleWrapper}>
@@ -16,7 +22,15 @@ export const HeaderBar = ({ title, subtitle, rightAction, onRightPress, rightIco
           onPress={onRightPress}
           style={styles.actionButton}
         >
-          {rightIcon ? <Ionicons name={rightIcon} size={22} color={THEME.colors.textPrimary} /> : rightAction}
+          {rightIcon ? (
+            <Ionicons
+              name={rightIcon}
+              size={22}
+              color={THEME.colors.textPrimary}
+            />
+          ) : (
+            rightAction
+          )}
         </TouchableOpacity>
       ) : null}
     </View>
@@ -29,16 +43,16 @@ const styles = StyleSheet.create({
     paddingTop: THEME.spacing.md,
     paddingBottom: THEME.spacing.sm,
     backgroundColor: THEME.colors.background,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   titleWrapper: {
     flex: 1,
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
     color: THEME.colors.textPrimary,
     letterSpacing: -0.3,
   },
@@ -52,8 +66,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: THEME.radius.full,
     backgroundColor: THEME.colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     ...THEME.shadows.card,
   },
 });
