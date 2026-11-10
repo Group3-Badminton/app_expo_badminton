@@ -51,8 +51,17 @@ export default function ProfileScreen({ navigation }) {
   }, [isAuthenticated, updateUser]);
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    if (isAuthenticated) {
+      fetchProfile();
+    }
+  }, [isAuthenticated, fetchProfile]);
+
+  // Đồng bộ thông tin khi user trong AuthContext thay đổi
+  useEffect(() => {
+    if (user) {
+      setProfile(user);
+    }
+  }, [user]);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
 import authService from '../services/authService';
@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   }, [loadStoredSession]);
 
   // Đăng nhập
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     const res = await authService.login(credentials);
     const payload = res.data || res;
     const currentUser = payload.user || payload;
@@ -40,59 +40,66 @@ export const AuthProvider = ({ children }) => {
     setUser(currentUser);
     setToken(tokenStr);
     return res;
-  };
+  }, []);
 
   // Đăng ký
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     const res = await authService.register(userData);
     return res;
-  };
+  }, []);
 
   // Xác thực OTP kích hoạt tài khoản
-  const verifyOtp = async (data) => {
+  const verifyOtp = useCallback(async (data) => {
     const res = await authService.verifyOtp(data);
     return res;
-  };
+  }, []);
 
   // Gửi mã OTP khôi phục mật khẩu
-  const sendOtp = async (email) => {
+  const sendOtp = useCallback(async (email) => {
     const res = await authService.sendOtp(email);
     return res;
-  };
+  }, []);
 
   // Đặt lại mật khẩu mới (Quên mật khẩu)
-  const resetPassword = async (data) => {
+  const resetPassword = useCallback(async (data) => {
     const res = await authService.resetPassword(data);
     return res;
-  };
+  }, []);
 
   // Đăng xuất
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await authService.logout();
     setUser(null);
     setToken(null);
-  };
+  }, []);
 
-  // Cập nhật thông tin user trong Context
-  const updateUser = async (updatedData) => {
-    const merged = { ...user, ...updatedData };
-    setUser(merged);
-    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));
-  };
+  // Cập nhật thông tin user trong Context (sử dụng functional updater để không đổi reference hàm)
+  const updateUser = useCallback(async (updatedData) => {
+    setUser((prevUser) => {
+      const merged = { ...(prevUser || {}), ...updatedData };
+      AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged)).catch((err) =>
+        console.warn('Lỗi lưu user vào storage:', err)
+      );
+      return merged;
+    });
+  }, []);
 
-  const value = {
-    user,
-    token,
-    loading,
-    isAuthenticated: !!token,
-    login,
-    register,
-    verifyOtp,
-    sendOtp,
-    resetPassword,
-    logout,
-    updateUser,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      isAuthenticated: !!token,
+      login,
+      register,
+      verifyOtp,
+      sendOtp,
+      resetPassword,
+      logout,
+      updateUser,
+    }),
+    [user, token, loading, login, register, verifyOtp, sendOtp, resetPassword, logout, updateUser]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

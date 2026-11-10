@@ -167,15 +167,15 @@ export default function BookingScreen({ route, navigation }) {
         ? data.data.courts
         : [];
       setCourts(list);
-      if (list.length > 0 && !selectedCourtId) {
-        setSelectedCourtId(initialCourtId || list[0]._id);
+      if (list.length > 0) {
+        setSelectedCourtId((prev) => prev || initialCourtId || list[0]._id);
       }
     } catch (e) {
       console.warn('Lỗi tải danh sách sân booking:', e);
     } finally {
       setLoadingCourts(false);
     }
-  }, [initialCourtId, selectedCourtId]);
+  }, [initialCourtId]);
 
   useEffect(() => {
     fetchCourts();
