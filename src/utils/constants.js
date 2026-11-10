@@ -1,8 +1,37 @@
 // Các hằng số dùng chung trong ứng dụng Mobile
 // Cổng Backend trong file .env của api_express_badminton là 9999
-// IP Wi-Fi hiện tại của máy tính: 192.168.101.116
-export const API_BASE_URL = 'http://192.168.101.116:9999/api';
-export const API_FALLBACK_URL = 'http://localhost:9999/api';
+import { NativeModules, Platform } from 'react-native';
+
+// Tự động nhận diện IP của máy tính host đang chạy Metro Dev Server
+const getDevHost = () => {
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const hostPart = scriptURL.split('://')[1]?.split('/')[0]?.split(':')[0];
+      if (hostPart && hostPart !== 'localhost' && hostPart !== '127.0.0.1') {
+        return hostPart;
+      }
+    }
+  } catch (e) {
+    // Không làm gián đoạn nếu môi trường build production không có scriptURL
+  }
+  return null;
+};
+
+const devHost = getDevHost();
+
+// IP Wi-Fi hiện tại của máy tính
+export const CURRENT_LOCAL_IP = '10.64.172.22';
+export const BACKEND_PORT = 9999;
+
+// Ưu tiên 1: EXPO_PUBLIC_API_URL trong .env
+// Ưu tiên 2: Tự động trích xuất IP máy chủ từ Metro bundler (scriptURL)
+// Ưu tiên 3: IP tĩnh hiện tại (CURRENT_LOCAL_IP)
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (devHost ? `http://${devHost}:${BACKEND_PORT}/api` : `http://${CURRENT_LOCAL_IP}:${BACKEND_PORT}/api`);
+
+export const API_FALLBACK_URL = `http://localhost:${BACKEND_PORT}/api`;
 
 export const STORAGE_KEYS = {
   TOKEN: '@bcms_token',

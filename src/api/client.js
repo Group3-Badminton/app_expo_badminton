@@ -10,6 +10,8 @@ const client = axios.create({
   },
 });
 
+console.log('🌐 [API Client] Base URL kết nối:', API_BASE_URL);
+
 // Interceptor: Tự động gán JWT Token vào Header của mỗi request
 client.interceptors.request.use(
   async (config) => {

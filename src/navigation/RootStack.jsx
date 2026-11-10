@@ -5,6 +5,7 @@ import { THEME } from '../utils/theme';
 import MainTabs from './MainTabs';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import BookingDetailScreen from '../screens/booking/BookingDetailScreen';
 import NotificationScreen from '../screens/profile/NotificationScreen';
 
@@ -54,6 +55,17 @@ export default function RootStack() {
         options={{
           headerShown: true,
           title: 'Đăng ký tài khoản',
+          headerTintColor: THEME.colors.textPrimary,
+          headerStyle: { backgroundColor: THEME.colors.surface },
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{
+          headerShown: true,
+          title: 'Quên mật khẩu',
           headerTintColor: THEME.colors.textPrimary,
           headerStyle: { backgroundColor: THEME.colors.surface },
           headerShadowVisible: false,

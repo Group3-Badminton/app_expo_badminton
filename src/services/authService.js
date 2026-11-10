@@ -39,6 +39,25 @@ export const authService = {
     return res.data;
   },
 
+  // Gửi mã OTP khôi phục mật khẩu (Quên mật khẩu)
+  sendOtp: async (email) => {
+    const res = await client.post('/auth/send-otp', {
+      email: (email || '').trim().toLowerCase(),
+    });
+    return res.data;
+  },
+
+  // Đặt lại mật khẩu mới (Quên mật khẩu)
+  resetPassword: async (data) => {
+    const res = await client.post('/auth/reset-password', {
+      email: (data.email || '').trim().toLowerCase(),
+      otp: (data.otp || '').trim(),
+      newPassword: data.newPassword,
+      confirmPassword: data.confirmPassword,
+    });
+    return res.data;
+  },
+
   // Lấy thông tin user hiện tại
   getCurrentUser: async () => {
     const res = await client.get('/users/profile');

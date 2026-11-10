@@ -54,6 +54,18 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
+  // Gửi mã OTP khôi phục mật khẩu
+  const sendOtp = async (email) => {
+    const res = await authService.sendOtp(email);
+    return res;
+  };
+
+  // Đặt lại mật khẩu mới (Quên mật khẩu)
+  const resetPassword = async (data) => {
+    const res = await authService.resetPassword(data);
+    return res;
+  };
+
   // Đăng xuất
   const logout = async () => {
     await authService.logout();
@@ -76,6 +88,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     verifyOtp,
+    sendOtp,
+    resetPassword,
     logout,
     updateUser,
   };

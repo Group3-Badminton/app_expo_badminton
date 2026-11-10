@@ -1,12 +1,23 @@
 # dependencies
 node_modules
 
+# environment variables
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
 # production
 public/app-*.js
 public/vendor-*.js
 public/screen-*.css
 public/index.html
 
+# expo & build
+.expo/
+dist/
+web-build/
 
 # misc
 .DS_Store

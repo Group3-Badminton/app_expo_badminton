@@ -115,6 +115,12 @@ export default function LoginScreen({ navigation }) {
             }
           />
 
+          <View style={styles.forgotPasswordRow}>
+            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
+            </TouchableOpacity>
+          </View>
+
           <Button
             title="Đăng nhập"
             onPress={handleLogin}
@@ -194,6 +200,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: THEME.colors.border,
     ...THEME.shadows.card,
+  },
+  forgotPasswordRow: {
+    alignItems: 'flex-end',
+    marginTop: -THEME.spacing.xs,
+    marginBottom: THEME.spacing.md,
+  },
+  forgotPasswordText: {
+    color: THEME.colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   submitBtn: {
     marginTop: THEME.spacing.sm,
