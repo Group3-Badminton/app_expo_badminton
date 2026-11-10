@@ -10,7 +10,10 @@ import {
   ActivityIndicator,
   Platform,
   StatusBar,
+  Linking,
+  Alert,
 } from 'react-native';
+import dayjs from 'dayjs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../../utils/theme';
 import { formatCurrency } from '../../utils/formatters';
@@ -31,6 +34,47 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [todayBooking, setTodayBooking] = useState(null);
+
+  // Lấy đơn thi đấu hôm nay của khách hàng
+  const fetchTodayBooking = useCallback(async () => {
+    if (!isAuthenticated) {
+      setTodayBooking(null);
+      return;
+    }
+    try {
+      const res = await bookingService.getMyBookings();
+      const list = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.bookings)
+        ? res.data.bookings
+        : Array.isArray(res?.bookings)
+        ? res.bookings
+        : [];
+
+      const today = dayjs().format('YYYY-MM-DD');
+
+      // Tìm đơn trong ngày hôm nay ở trạng thái CONFIRMED hoặc CHECKED_IN
+      const match = list.find((b) => {
+        if (!b) return false;
+        const st = b.status;
+        const isConfirmedOrPlaying =
+          st === 'CONFIRMED' || st === 'Confirmed' || st === 'CHECKED_IN' || st === 'Checked-in';
+        if (!isConfirmedOrPlaying) return false;
+
+        const firstItem = Array.isArray(b.items) && b.items.length > 0 ? b.items[0] : null;
+        const rawDate = firstItem?.bookingDate || b.bookingDate || b.date;
+        if (!rawDate) return false;
+        return dayjs(rawDate).format('YYYY-MM-DD') === today;
+      });
+
+      setTodayBooking(match || null);
+    } catch (e) {
+      // Bỏ qua lỗi ngầm
+    }
+  }, [isAuthenticated]);
 
   const fetchUnreadCount = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -66,7 +110,8 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchUnreadCount();
-    }, [fetchUnreadCount])
+      fetchTodayBooking();
+    }, [fetchUnreadCount, fetchTodayBooking])
   );
 
   useEffect(() => {
@@ -77,6 +122,42 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(true);
     fetchCourts();
     fetchUnreadCount();
+    fetchTodayBooking();
+  };
+
+  // Thao tác 1 chạm: Gọi hotline
+  const handleCallHotline = () => {
+    Linking.openURL('tel:19008888').catch(() => {
+      Alert.alert('Lỗi', 'Không thể khởi động trình gọi điện thoại trên thiết bị này.');
+    });
+  };
+
+  // Thao tác 1 chạm: Mở bản đồ chỉ đường đến Đại học FPT Cần Thơ
+  const handleOpenMap = () => {
+    const destination = encodeURIComponent('Đại học FPT Cần Thơ');
+    const url = Platform.select({
+      ios: `maps:0,0?q=${destination}`,
+      android: `geo:0,0?q=${destination}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${destination}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${destination}`);
+    });
+  };
+
+  const getUpcomingCourtName = (b) => {
+    if (!b) return 'Sân cầu lông';
+    const firstItem = Array.isArray(b.items) && b.items.length > 0 ? b.items[0] : null;
+    const court = firstItem?.courtId || b.courtId || b.court;
+    return court?.courtName || court?.name || b.courtName || 'Sân 1';
+  };
+
+  const getUpcomingTime = (b) => {
+    if (!b) return '';
+    const firstItem = Array.isArray(b.items) && b.items.length > 0 ? b.items[0] : null;
+    const s = firstItem?.startTime || b.startTime || '08:00';
+    const e = firstItem?.endTime || b.endTime || '10:00';
+    return `${s} - ${e}`;
   };
 
   return (
@@ -125,6 +206,33 @@ export default function HomeScreen({ navigation }) {
           />
         }
       >
+        {/* THẺ NHẮC NHỞ LỊCH ĐẤU HÔM NAY (UPCOMING MATCH BANNER) */}
+        {todayBooking ? (
+          <TouchableOpacity
+            style={styles.upcomingMatchCard}
+            activeOpacity={0.88}
+            onPress={() => navigation.navigate('BookingDetail', { booking: todayBooking })}
+          >
+            <View style={styles.upcomingTopRow}>
+              <View style={styles.upcomingBadge}>
+                <View style={styles.pulsingDot} />
+                <Text style={styles.upcomingBadgeText}>LỊCH THI ĐẤU HÔM NAY</Text>
+              </View>
+              <View style={styles.viewTicketBtn}>
+                <Text style={styles.viewTicketText}>Xem vé</Text>
+                <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+              </View>
+            </View>
+
+            <Text style={styles.upcomingMatchTitle}>
+              🏸 Hôm nay bạn có lịch: {getUpcomingCourtName(todayBooking)} ({getUpcomingTime(todayBooking)})
+            </Text>
+            <Text style={styles.upcomingMatchSubtitle}>
+              Mã vé: {todayBooking.bookingCode || todayBooking._id?.slice(-8)?.toUpperCase()} • Chúc bạn có trận đấu vui vẻ!
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Hero Banner Thể Thao Hiện Đại */}
         <View style={styles.heroBanner}>
           <View style={styles.heroBadge}>
@@ -143,6 +251,41 @@ export default function HomeScreen({ navigation }) {
           >
             <Text style={styles.heroCtaText}>Đặt sân ngay</Text>
             <Ionicons name="arrow-forward" size={18} color={THEME.colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Tiện Ích Sân: Hotline & Chỉ đường Google Maps */}
+        <View style={styles.contactBarCard}>
+          <TouchableOpacity
+            style={styles.contactBarItem}
+            activeOpacity={0.75}
+            onPress={handleOpenMap}
+          >
+            <View style={[styles.contactIconCircle, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="location" size={18} color={THEME.colors.primary} />
+            </View>
+            <View style={styles.contactItemContent}>
+              <Text style={styles.contactItemTitle}>Đại học FPT Cần Thơ</Text>
+              <Text style={styles.contactItemSubtitle}>Chỉ đường Google Maps</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={THEME.colors.textMuted} />
+          </TouchableOpacity>
+
+          <View style={styles.contactDivider} />
+
+          <TouchableOpacity
+            style={styles.contactBarItem}
+            activeOpacity={0.75}
+            onPress={handleCallHotline}
+          >
+            <View style={[styles.contactIconCircle, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="call" size={18} color="#D97706" />
+            </View>
+            <View style={styles.contactItemContent}>
+              <Text style={styles.contactItemTitle}>Hotline: 0764220971</Text>
+              <Text style={styles.contactItemSubtitle}>Hỗ trợ & giải đáp thắc mắc</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={THEME.colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -300,6 +443,108 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: THEME.spacing.lg,
     paddingBottom: 110,
+  },
+  upcomingMatchCard: {
+    backgroundColor: '#064E3B',
+    borderRadius: THEME.radius.xl,
+    padding: THEME.spacing.lg,
+    marginBottom: THEME.spacing.lg,
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    ...THEME.shadows.card,
+  },
+  upcomingTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  upcomingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: THEME.radius.full,
+  },
+  pulsingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34D399',
+    marginRight: 6,
+  },
+  upcomingBadgeText: {
+    color: '#ECFDF5',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  viewTicketBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: THEME.radius.full,
+  },
+  viewTicketText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginRight: 4,
+  },
+  upcomingMatchTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    lineHeight: 22,
+  },
+  upcomingMatchSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+  },
+  contactBarCard: {
+    backgroundColor: THEME.colors.surface,
+    borderRadius: THEME.radius.xl,
+    padding: THEME.spacing.sm,
+    marginBottom: THEME.spacing.xl,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+    ...THEME.shadows.card,
+  },
+  contactBarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: THEME.spacing.sm,
+  },
+  contactIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  contactItemContent: {
+    flex: 1,
+  },
+  contactItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+  },
+  contactItemSubtitle: {
+    fontSize: 12,
+    color: THEME.colors.textSecondary,
+    marginTop: 1,
+  },
+  contactDivider: {
+    height: 1,
+    backgroundColor: THEME.colors.borderLight,
+    marginHorizontal: THEME.spacing.sm,
   },
   heroBanner: {
     backgroundColor: THEME.colors.primary,

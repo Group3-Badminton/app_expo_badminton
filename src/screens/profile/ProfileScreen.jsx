@@ -9,6 +9,8 @@ import {
   Modal,
   ActivityIndicator,
   RefreshControl,
+  Linking,
+  Platform,
 } from 'react-native';
 import { THEME } from '../../utils/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -118,6 +120,26 @@ export default function ProfileScreen({ navigation }) {
         },
       },
     ]);
+  };
+
+  // Thao tác 1 chạm: Gọi hotline
+  const handleCallHotline = () => {
+    Linking.openURL('tel:19008888').catch(() => {
+      Alert.alert('Lỗi', 'Không thể khởi động trình gọi điện thoại trên thiết bị này.');
+    });
+  };
+
+  // Thao tác 1 chạm: Mở bản đồ chỉ đường đến Đại học FPT Cần Thơ
+  const handleOpenMap = () => {
+    const destination = encodeURIComponent('Đại học FPT Cần Thơ');
+    const url = Platform.select({
+      ios: `maps:0,0?q=${destination}`,
+      android: `geo:0,0?q=${destination}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${destination}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${destination}`);
+    });
   };
 
   const currentUser = profile || user;
@@ -256,6 +278,69 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <Ionicons name="chevron-forward" size={18} color={THEME.colors.textMuted} />
           </TouchableOpacity>
+        </View>
+
+        {/* Cụm Thông Tin Hệ Thống & Hỗ Trợ */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionHeader}>Hỗ trợ & Thông tin sân</Text>
+
+          <TouchableOpacity
+            style={styles.infoRowClickable}
+            activeOpacity={0.7}
+            onPress={handleOpenMap}
+          >
+            <View style={styles.infoRowLeft}>
+              <Ionicons name="location-outline" size={18} color={THEME.colors.primary} style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.infoLabel}>Địa chỉ cụm sân</Text>
+                <Text style={styles.infoValueSub}>Đại học FPT Cần Thơ</Text>
+              </View>
+            </View>
+            <View style={styles.infoActionPill}>
+              <Text style={styles.infoActionPillText}>Chỉ đường</Text>
+              <Ionicons name="chevron-forward" size={13} color={THEME.colors.primary} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.menuDivider} />
+
+          <TouchableOpacity
+            style={styles.infoRowClickable}
+            activeOpacity={0.7}
+            onPress={handleCallHotline}
+          >
+            <View style={styles.infoRowLeft}>
+              <Ionicons name="call-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
+              <View>
+                <Text style={styles.infoLabel}>Hotline hỗ trợ</Text>
+                <Text style={[styles.infoValueSub, { color: '#D97706', fontWeight: '700' }]}>1900 8888</Text>
+              </View>
+            </View>
+            <View style={[styles.infoActionPill, { backgroundColor: '#FEF3C7' }]}>
+              <Text style={[styles.infoActionPillText, { color: '#D97706' }]}>Gọi ngay</Text>
+              <Ionicons name="call" size={11} color="#D97706" />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.menuDivider} />
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoRowLeft}>
+              <Ionicons name="time-outline" size={18} color={THEME.colors.textMuted} style={{ marginRight: 8 }} />
+              <Text style={styles.infoLabel}>Giờ mở cửa</Text>
+            </View>
+            <Text style={styles.infoValue}>06:00 - 23:00 hàng ngày</Text>
+          </View>
+
+          <View style={styles.menuDivider} />
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoRowLeft}>
+              <Ionicons name="phone-portrait-outline" size={18} color={THEME.colors.textMuted} style={{ marginRight: 8 }} />
+              <Text style={styles.infoLabel}>Phiên bản ứng dụng</Text>
+            </View>
+            <Text style={styles.infoValue}>1.0.0 (Expo Mobile)</Text>
+          </View>
         </View>
 
         {/* Nút Đăng xuất */}
@@ -539,6 +624,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: THEME.spacing.xs + 2,
+  },
+  infoRowClickable: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: THEME.spacing.xs + 2,
+  },
+  infoRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  infoValueSub: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+    marginTop: 1,
+  },
+  infoActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: THEME.radius.full,
+  },
+  infoActionPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: THEME.colors.primary,
+    marginRight: 2,
   },
   infoLabel: {
     fontSize: 13,
