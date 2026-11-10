@@ -55,13 +55,13 @@ export const bookingService = {
     return res.data;
   },
 
-  // Hủy yêu cầu đặt sân
-  cancelBooking: async (id, reason = '') => {
-    const res = await client.patch(`/bookings/${id}/status`, {
-      status: 'CANCELLED',
-      note: reason || 'Khách hàng tự hủy đơn trên mobile',
-      cancelReason: reason || 'Khách hàng tự hủy đơn trên mobile'
-    });
+  // Hủy yêu cầu đặt sân (Customer chỉ được gửi trạng thái CANCELLED, không gửi kèm note/paymentStatus)
+  cancelBooking: async (id, itemId = null) => {
+    const payload = { status: 'CANCELLED' };
+    if (itemId) {
+      payload.itemId = itemId;
+    }
+    const res = await client.patch(`/bookings/${id}/status`, payload);
     return res.data;
   }
 };

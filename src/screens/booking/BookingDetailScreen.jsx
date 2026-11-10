@@ -12,6 +12,7 @@ import {
 import dayjs from 'dayjs';
 import { THEME } from '../../utils/theme';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { HOTLINE_NUMBER, HOTLINE_DISPLAY } from '../../utils/constants';
 import StatusBadge from '../../components/StatusBadge';
 import Button from '../../components/Button';
 import bookingService from '../../services/bookingService';
@@ -46,11 +47,23 @@ export default function BookingDetailScreen({ route, navigation }) {
   const timeStr = `${sTime} - ${eTime}`;
   const totalAmount = booking.finalTotalAmount || booking.totalAmount || 0;
 
+  const isCheckedIn = currentStatus === 'CHECKED_IN' || currentStatus === 'Checked-in';
+  const isCompleted = currentStatus === 'COMPLETED' || currentStatus === 'Completed';
+  const isCancelled = currentStatus === 'CANCELLED' || currentStatus === 'Cancelled';
+  const isRejected = currentStatus === 'REJECTED' || currentStatus === 'Rejected';
+
+  // Khách được phép hủy khi ở trạng thái Chờ duyệt (PENDING_APPROVAL) hoặc Đã xác nhận (CONFIRMED)
+  // Khi Admin đã "Nhận sân" (CHECKED_IN) hoặc đơn đã Hoàn thành / Đã hủy -> KHÔNG CHO HỦY!
   const canCancel =
-    currentStatus === 'PENDING_APPROVAL' ||
-    currentStatus === 'CONFIRMED' ||
-    currentStatus === 'Pending' ||
-    currentStatus === 'Confirmed';
+    !isCheckedIn &&
+    !isCompleted &&
+    !isCancelled &&
+    !isRejected &&
+    (currentStatus === 'PENDING_APPROVAL' ||
+      currentStatus === 'CONFIRMED' ||
+      currentStatus === 'PENDING' ||
+      currentStatus === 'Pending' ||
+      currentStatus === 'Confirmed');
 
   // Tính toán thời gian đếm ngược đến giờ vào sân
   const [countdownText, setCountdownText] = useState('');
@@ -123,7 +136,7 @@ export default function BookingDetailScreen({ route, navigation }) {
 
   // Thao tác 1 chạm: Gọi hotline
   const handleCallHotline = () => {
-    Linking.openURL('tel:19008888').catch(() => {
+    Linking.openURL(`tel:${HOTLINE_NUMBER}`).catch(() => {
       Alert.alert('Lỗi', 'Không thể khởi động trình quay số điện thoại trên thiết bị này.');
     });
   };
@@ -144,7 +157,7 @@ export default function BookingDetailScreen({ route, navigation }) {
   const handleCancel = () => {
     Alert.alert(
       'Hủy đơn đặt sân',
-      'Bạn có chắc chắn muốn hủy đơn đặt sân này không?',
+      'Bạn có chắc chắn muốn hủy đơn đặt sân này không? Hành động này không thể hoàn tác.',
       [
         { text: 'Quay lại', style: 'cancel' },
         {
@@ -153,11 +166,15 @@ export default function BookingDetailScreen({ route, navigation }) {
           onPress: async () => {
             try {
               setCancelling(true);
-              await bookingService.cancelBooking(booking._id, 'Khách yêu cầu hủy qua ứng dụng');
+              await bookingService.cancelBooking(booking._id);
               setCurrentStatus('CANCELLED');
               Alert.alert('Thành công', 'Đơn đặt sân đã được hủy thành công.');
             } catch (err) {
-              const msg = err.response?.data?.message || 'Không thể hủy đơn đặt sân vào lúc này.';
+              const msg =
+                err.response?.data?.message ||
+                err.response?.data?.error ||
+                err.message ||
+                'Không thể hủy đơn đặt sân vào lúc này.';
               Alert.alert('Lỗi', msg);
             } finally {
               setCancelling(false);
@@ -224,17 +241,6 @@ export default function BookingDetailScreen({ route, navigation }) {
           </Text>
         </View>
 
-        {/* Thông tin mã QR check-in tượng trưng phong cách thẻ tối giản */}
-        <View style={styles.qrContainer}>
-          <View style={styles.qrPlaceholder}>
-            <Ionicons name="qr-code" size={110} color={THEME.colors.textPrimary} />
-          </View>
-          <Text style={styles.bookingCodeText}>MÃ VÉ: {bookingCode}</Text>
-          <Text style={styles.qrInstruction}>
-            Đưa mã này cho nhân viên lễ tân tại quầy để check-in sân
-          </Text>
-        </View>
-
         {/* Đường cắt vé (Ticket Perforation) */}
         <View style={styles.perforationRow}>
           <View style={styles.perforationHoleLeft} />
@@ -246,23 +252,30 @@ export default function BookingDetailScreen({ route, navigation }) {
         <View style={styles.ticketDetails}>
           <View style={styles.row}>
             <View style={styles.col}>
-              <Text style={styles.detailLabel}>NGÀY THI ĐẤU</Text>
-              <Text style={styles.detailValue}>{dateStr}</Text>
+              <Text style={styles.detailLabel}>MÃ VÉ ĐẶT SÂN</Text>
+              <Text style={[styles.detailValue, styles.bookingCodeValue]}>{bookingCode}</Text>
             </View>
             <View style={styles.colRight}>
-              <Text style={styles.detailLabel}>KHUNG GIỜ</Text>
-              <Text style={styles.detailValue}>{timeStr}</Text>
+              <Text style={styles.detailLabel}>NGÀY THI ĐẤU</Text>
+              <Text style={styles.detailValue}>{dateStr}</Text>
             </View>
           </View>
 
           <View style={[styles.row, { marginTop: 14 }]}>
             <View style={styles.col}>
+              <Text style={styles.detailLabel}>KHUNG GIỜ</Text>
+              <Text style={styles.detailValue}>{timeStr}</Text>
+            </View>
+            <View style={styles.colRight}>
               <Text style={styles.detailLabel}>NGƯỜI ĐẶT</Text>
               <Text style={styles.detailValue}>
                 {booking.customerName || booking.user?.fullName || 'Khách hàng'}
               </Text>
             </View>
-            <View style={styles.colRight}>
+          </View>
+
+          <View style={[styles.row, { marginTop: 14 }]}>
+            <View style={styles.col}>
               <Text style={styles.detailLabel}>SỐ ĐIỆN THOẠI</Text>
               <Text style={styles.detailValue}>
                 {booking.customerPhone || booking.user?.phoneNumber || 'N/A'}
@@ -329,13 +342,23 @@ export default function BookingDetailScreen({ route, navigation }) {
           </View>
           <View style={styles.quickActionContent}>
             <Text style={styles.quickActionTitle}>Hotline hỗ trợ</Text>
-            <Text style={styles.quickActionSubtitle}>1900 8888 (Gọi ngay)</Text>
+            <Text style={styles.quickActionSubtitle}>{HOTLINE_DISPLAY} (Gọi ngay)</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={THEME.colors.textMuted} />
         </TouchableOpacity>
       </View>
 
-      {/* Button Hủy Đơn nếu còn hiệu lực */}
+      {/* Thông báo nếu sân đã được admin nhận (Check-in) */}
+      {isCheckedIn ? (
+        <View style={styles.checkedInNoticeBox}>
+          <Ionicons name="shield-checkmark" size={18} color="#2563EB" style={{ marginRight: 8 }} />
+          <Text style={styles.checkedInNoticeText}>
+            Sân đã được nhận (Đang trong ca chơi). Đơn đặt sân không thể hủy.
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Button Hủy Đơn nếu chưa nhận sân (PENDING_APPROVAL hoặc CONFIRMED) */}
       {canCancel ? (
         <Button
           title="Hủy đơn đặt sân này"
@@ -423,49 +446,26 @@ const styles = StyleSheet.create({
   countdownTextEnded: {
     color: '#64748B',
   },
-  qrContainer: {
-    alignItems: 'center',
-    paddingVertical: THEME.spacing.lg,
-    backgroundColor: THEME.colors.surfaceAlt,
-  },
-  qrPlaceholder: {
-    width: 140,
-    height: 140,
-    backgroundColor: '#FFFFFF',
-    borderRadius: THEME.radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    ...THEME.shadows.card,
-  },
-  bookingCodeText: {
+  bookingCodeValue: {
+    color: THEME.colors.primary,
     fontSize: 16,
     fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    marginTop: 12,
-    letterSpacing: 1,
-  },
-  qrInstruction: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    paddingHorizontal: THEME.spacing.xl,
+    letterSpacing: 0.5,
   },
   perforationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: THEME.colors.surfaceAlt,
+    backgroundColor: THEME.colors.surface,
     overflow: 'hidden',
-    height: 24,
+    height: 20,
+    marginVertical: 4,
   },
   perforationHoleLeft: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: THEME.colors.background,
-    marginLeft: -12,
+    marginLeft: -10,
   },
   perforationLine: {
     flex: 1,
@@ -474,11 +474,11 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   perforationHoleRight: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: THEME.colors.background,
-    marginRight: -12,
+    marginRight: -10,
   },
   ticketDetails: {
     padding: THEME.spacing.xl,
@@ -582,6 +582,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: THEME.colors.textSecondary,
     marginTop: 1,
+  },
+  checkedInNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: THEME.radius.lg,
+    padding: THEME.spacing.md,
+    marginTop: THEME.spacing.lg,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  checkedInNoticeText: {
+    color: '#1E40AF',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
   cancelBtn: {
     marginTop: THEME.spacing.lg,

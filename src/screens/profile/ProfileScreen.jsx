@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { THEME } from '../../utils/theme';
+import { HOTLINE_NUMBER, HOTLINE_DISPLAY } from '../../utils/constants';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 import HeaderBar from '../../components/HeaderBar';
@@ -124,7 +125,7 @@ export default function ProfileScreen({ navigation }) {
 
   // Thao tác 1 chạm: Gọi hotline
   const handleCallHotline = () => {
-    Linking.openURL('tel:19008888').catch(() => {
+    Linking.openURL(`tel:${HOTLINE_NUMBER}`).catch(() => {
       Alert.alert('Lỗi', 'Không thể khởi động trình gọi điện thoại trên thiết bị này.');
     });
   };
@@ -313,7 +314,7 @@ export default function ProfileScreen({ navigation }) {
               <Ionicons name="call-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
               <View>
                 <Text style={styles.infoLabel}>Hotline hỗ trợ</Text>
-                <Text style={[styles.infoValueSub, { color: '#D97706', fontWeight: '700' }]}>1900 8888</Text>
+                <Text style={[styles.infoValueSub, { color: '#D97706', fontWeight: '700' }]}>{HOTLINE_DISPLAY}</Text>
               </View>
             </View>
             <View style={[styles.infoActionPill, { backgroundColor: '#FEF3C7' }]}>

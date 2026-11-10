@@ -24,7 +24,7 @@ export default function RootStack() {
       {/* 4 Bottom Tabs Chính */}
       <Stack.Screen name="Main" component={MainTabs} />
 
-      {/* Chi tiết đặt sân & Mã QR check-in */}
+      {/* Chi tiết đơn đặt sân */}
       <Stack.Screen
         name="BookingDetail"
         component={BookingDetailScreen}
