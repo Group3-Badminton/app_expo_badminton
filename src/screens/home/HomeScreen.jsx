@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { THEME } from '../../utils/theme';
 import { formatCurrency } from '../../utils/formatters';
+import { HOTLINE_NUMBER, HOTLINE_DISPLAY } from '../../utils/constants';
 import { useAuth } from '../../context/AuthContext';
 import bookingService from '../../services/bookingService';
 import notificationService from '../../services/notificationService';
@@ -127,7 +128,7 @@ export default function HomeScreen({ navigation }) {
 
   // Thao tác 1 chạm: Gọi hotline
   const handleCallHotline = () => {
-    Linking.openURL('tel:19008888').catch(() => {
+    Linking.openURL(`tel:${HOTLINE_NUMBER}`).catch(() => {
       Alert.alert('Lỗi', 'Không thể khởi động trình gọi điện thoại trên thiết bị này.');
     });
   };
@@ -282,7 +283,7 @@ export default function HomeScreen({ navigation }) {
               <Ionicons name="call" size={18} color="#D97706" />
             </View>
             <View style={styles.contactItemContent}>
-              <Text style={styles.contactItemTitle}>Hotline: 0764220971</Text>
+              <Text style={styles.contactItemTitle}>Hotline: {HOTLINE_DISPLAY}</Text>
               <Text style={styles.contactItemSubtitle}>Hỗ trợ & giải đáp thắc mắc</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={THEME.colors.textMuted} />

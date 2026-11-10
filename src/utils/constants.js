@@ -33,6 +33,10 @@ export const API_BASE_URL =
 
 export const API_FALLBACK_URL = `http://localhost:${BACKEND_PORT}/api`;
 
+// Hotline hỗ trợ hệ thống
+export const HOTLINE_NUMBER = '0764220971';
+export const HOTLINE_DISPLAY = '0764 220 971';
+
 export const STORAGE_KEYS = {
   TOKEN: '@bcms_token',
   USER: '@bcms_user',
