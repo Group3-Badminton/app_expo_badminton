@@ -36,8 +36,14 @@ client.interceptors.response.use(
       error.customMessage = `Quá thời gian kết nối (5s) tới: ${API_BASE_URL}. Vui lòng kiểm tra lại kết nối mạng hoặc xem Backend Server đã bật chưa!`;
     } else if (!error.response) {
       error.customMessage = `Không thể kết nối đến máy chủ (${API_BASE_URL}). Hãy đảm bảo API Backend (port 9999) đang chạy!`;
-    } else if (error.response.status === 401) {
-      // Hết hạn phiên đăng nhập
+    } else if (
+      error.response?.status === 401 ||
+      (error.response?.status === 403 &&
+        (error.response?.data?.message?.includes('Token') ||
+          error.response?.data?.message?.includes('khóa') ||
+          error.response?.data?.message?.includes('vô hiệu')))
+    ) {
+      // Hết hạn phiên đăng nhập, Token không hợp lệ hoặc tài khoản bị khóa (Đồng bộ xử lý chuẩn Web)
       await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
       await AsyncStorage.removeItem(STORAGE_KEYS.USER);
     }

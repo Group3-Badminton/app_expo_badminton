@@ -24,7 +24,7 @@ import notificationService from '../../services/notificationService';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen({ navigation }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const safeTopPadding = Math.max(
     insets.top,
@@ -74,9 +74,19 @@ export default function HomeScreen({ navigation }) {
 
       setTodayBooking(match || null);
     } catch (e) {
-      // Bỏ qua lỗi ngầm
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message;
+      if (
+        status === 401 ||
+        (status === 403 &&
+          (msg?.includes('Token') || msg?.includes('khóa') || msg?.includes('vô hiệu')))
+      ) {
+        if (logout) {
+          logout();
+        }
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, logout]);
 
   const fetchUnreadCount = useCallback(async () => {
     if (!isAuthenticated) return;

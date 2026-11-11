@@ -28,7 +28,7 @@ const TABS = [
 ];
 
 export default function MyBookingsScreen({ navigation }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,13 +56,26 @@ export default function MyBookingsScreen({ navigation }) {
       }
       setBookings(list);
     } catch (e) {
-      console.warn('Lỗi khi tải lịch sử booking:', e);
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message;
+      // 401 hoặc 403 khi Token hết hạn / không hợp lệ hoặc tài khoản bị khóa
+      if (
+        status === 401 ||
+        (status === 403 &&
+          (msg?.includes('Token') || msg?.includes('khóa') || msg?.includes('vô hiệu')))
+      ) {
+        if (logout) {
+          await logout();
+        }
+      } else {
+        console.warn('Lỗi khi tải lịch sử booking:', e);
+      }
       setBookings([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, logout]);
 
   useEffect(() => {
     fetchBookings();
