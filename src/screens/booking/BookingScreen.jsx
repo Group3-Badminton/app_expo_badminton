@@ -694,11 +694,8 @@ export default function BookingScreen({ route, navigation }) {
             <View style={styles.stepBadge}>
               <Text style={styles.stepBadgeText}>3</Text>
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, justifyContent: 'center' }}>
               <Text style={styles.sectionTitle}>Khung giờ thuê sân (Tối thiểu 1 tiếng)</Text>
-              <Text style={styles.sectionSubtitle}>
-                Các mốc giờ làm tròn 15 phút (:00, :15, :30, :45)
-              </Text>
             </View>
           </View>
 

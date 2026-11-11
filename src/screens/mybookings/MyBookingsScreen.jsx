@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { THEME } from '../../utils/theme';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -143,22 +144,29 @@ export default function MyBookingsScreen({ navigation }) {
         onRightPress={fetchBookings}
       />
 
-      {/* Tabs Filter */}
-      <View style={styles.tabsRow}>
-        {TABS.map((tab) => {
-          const isSelected = selectedTab === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tabButton, isSelected && styles.tabButtonActive]}
-              onPress={() => setSelectedTab(tab.key)}
-            >
-              <Text style={[styles.tabText, isSelected && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Tabs Filter (Hỗ trợ cuộn ngang mượt mà, không bị tràn màn hình) */}
+      <View style={styles.tabsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsScrollContent}
+        >
+          {TABS.map((tab) => {
+            const isSelected = selectedTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                activeOpacity={0.8}
+                style={[styles.tabButton, isSelected && styles.tabButtonActive]}
+                onPress={() => setSelectedTab(tab.key)}
+              >
+                <Text style={[styles.tabText, isSelected && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -270,13 +278,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: THEME.colors.background,
   },
-  tabsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.sm,
+  tabsContainer: {
     backgroundColor: THEME.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: THEME.colors.borderLight,
+  },
+  tabsScrollContent: {
+    flexDirection: 'row',
+    paddingHorizontal: THEME.spacing.lg,
+    paddingVertical: THEME.spacing.sm,
   },
   tabButton: {
     paddingVertical: 6,
