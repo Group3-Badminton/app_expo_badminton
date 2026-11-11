@@ -46,6 +46,17 @@ const getInitialStartTimeForDate = (dateStr) => {
   return validSlot || '22:00';
 };
 
+// Hàm kiểm tra sân có đang tạm đóng hoặc bảo trì hay không
+const isCourtInactive = (court) => {
+  if (!court) return true;
+  return (
+    court.status === 'INACTIVE' ||
+    court.status === 'Inactive' ||
+    court.operationalStatus === 'MAINTENANCE' ||
+    court.isMaintenance === true
+  );
+};
+
 export default function BookingScreen({ route, navigation }) {
   const { user, isAuthenticated } = useAuth();
   const initialCourtId = route.params?.initialCourtId;
@@ -54,17 +65,25 @@ export default function BookingScreen({ route, navigation }) {
   const [courts, setCourts] = useState([]);
   const [loadingCourts, setLoadingCourts] = useState(true);
 
-  // Bước 1: Chọn Sân (Hỗ trợ chọn nhiều sân thi đấu cùng lúc)
+  // Bước 1: Chọn Sân (Hỗ trợ chọn nhiều sân thi đấu cùng lúc, chỉ tính sân ĐANG HOẠT ĐỘNG)
   const [selectedCourtIds, setSelectedCourtIds] = useState(initialCourtId ? [initialCourtId] : []);
   const selectedCourts = useMemo(() => {
-    return (Array.isArray(courts) ? courts : []).filter((c) => selectedCourtIds.includes(c._id));
+    return (Array.isArray(courts) ? courts : []).filter(
+      (c) => selectedCourtIds.includes(c._id) && !isCourtInactive(c)
+    );
   }, [courts, selectedCourtIds]);
-  const selectedCourtId = selectedCourtIds[0] || null;
+  const selectedCourtId = selectedCourts[0]?._id || null;
 
   const handleToggleCourt = (courtId) => {
+    const target = courts.find((c) => c._id === courtId);
+    if (target && isCourtInactive(target)) {
+      Alert.alert('Sân tạm đóng', 'Sân này đang trong thời gian bảo trì hoặc tạm đóng, không thể đặt!');
+      return;
+    }
+
     setSelectedCourtIds((prev) => {
       if (prev.includes(courtId)) {
-        if (prev.length === 1) {
+        if (selectedCourts.length <= 1) {
           Alert.alert('Thông báo', 'Bạn cần chọn ít nhất 1 sân thi đấu trong đơn đặt!');
           return prev;
         }
@@ -190,7 +209,26 @@ export default function BookingScreen({ route, navigation }) {
         : [];
       setCourts(list);
       if (list.length > 0) {
-        setSelectedCourtIds((prev) => (prev.length > 0 ? prev : [initialCourtId || list[0]._id]));
+        setSelectedCourtIds((prev) => {
+          // Lọc lại các sân cũ hợp lệ (phải tồn tại và đang hoạt động)
+          const validPrev = prev.filter((id) => {
+            const found = list.find((c) => c._id === id);
+            return found && !isCourtInactive(found);
+          });
+          if (validPrev.length > 0) return validPrev;
+
+          // Nếu có truyền initialCourtId và sân đó còn hoạt động
+          if (initialCourtId) {
+            const initialFound = list.find((c) => c._id === initialCourtId);
+            if (initialFound && !isCourtInactive(initialFound)) {
+              return [initialCourtId];
+            }
+          }
+
+          // Mặc định chọn sân đang hoạt động đầu tiên (bỏ qua sân tạm đóng / bảo trì)
+          const firstActiveCourt = list.find((c) => !isCourtInactive(c));
+          return firstActiveCourt ? [firstActiveCourt._id] : [];
+        });
       }
     } catch (e) {
       console.warn('Lỗi tải danh sách sân booking:', e);
@@ -203,12 +241,48 @@ export default function BookingScreen({ route, navigation }) {
     fetchCourts();
   }, [fetchCourts]);
 
-  // Cập nhật selectedCourtIds nếu có truyền qua route
+  // Cập nhật selectedCourtIds nếu có truyền qua route (chỉ nhận nếu sân đang hoạt động)
   useEffect(() => {
-    if (route.params?.initialCourtId) {
-      setSelectedCourtIds([route.params.initialCourtId]);
+    if (route.params?.initialCourtId && courts.length > 0) {
+      const initialFound = courts.find((c) => c._id === route.params.initialCourtId);
+      if (initialFound && !isCourtInactive(initialFound)) {
+        setSelectedCourtIds([route.params.initialCourtId]);
+      }
     }
-  }, [route.params?.initialCourtId]);
+  }, [route.params?.initialCourtId, courts]);
+
+  // 1.5. Tải bảng giá tham khảo thực tế từ backend theo từng sân (Đồng bộ chuẩn Web)
+  const [referencePrices, setReferencePrices] = useState({});
+
+  useEffect(() => {
+    const fetchReferencePrices = async () => {
+      if (!Array.isArray(courts) || courts.length === 0) return;
+      try {
+        const courtOrders = courts.map((c) => ({
+          courtId: c._id,
+          startTime: '08:00',
+          endTime: '09:00',
+        }));
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders,
+          bookingDate: selectedDate,
+        });
+        const breakdowns = res?.data?.courtBreakdowns || res?.courtBreakdowns || [];
+        if (Array.isArray(breakdowns)) {
+          const map = {};
+          breakdowns.forEach((cb) => {
+            if (cb.courtId) {
+              map[cb.courtId] = cb.totalAmount;
+            }
+          });
+          setReferencePrices(map);
+        }
+      } catch (err) {
+        console.warn('Lỗi tải bảng giá tham khảo từ backend:', err);
+      }
+    };
+    fetchReferencePrices();
+  }, [courts, selectedDate]);
 
   // 2. Tải tình trạng khung giờ đã đặt của các sân theo ngày (Kiểm tra lịch trùng)
   const fetchAvailability = useCallback(async () => {
@@ -615,13 +689,12 @@ export default function BookingScreen({ route, navigation }) {
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courtScroll}>
               {(Array.isArray(courts) ? courts : []).map((court) => {
-                const isSelected = selectedCourtIds.includes(court._id);
+                const isInactive = isCourtInactive(court);
+                const isSelected = !isInactive && selectedCourtIds.includes(court._id);
                 const courtName = court.courtName || court.name || `Sân ${court.courtNumber}`;
                 const rawType = (court.courtType || court.type || 'STANDARD').toUpperCase();
                 const isVip = rawType.includes('VIP');
-                const defaultPrice = isVip ? 130000 : rawType.includes('PREMIUM') ? 160000 : 80000;
-                const price = court.pricePerHour || court.basePrice || defaultPrice;
-                const isInactive = court.status === 'INACTIVE' || court.status === 'Inactive' || court.operationalStatus === 'MAINTENANCE';
+                const price = referencePrices[court._id] || court.pricePerHour || court.basePrice;
                 return (
                   <TouchableOpacity
                     key={court._id}
@@ -630,15 +703,15 @@ export default function BookingScreen({ route, navigation }) {
                     style={[styles.courtSelectCard, isSelected && styles.courtSelectCardActive, isInactive && { opacity: 0.55, backgroundColor: '#F3F4F6' }]}
                     onPress={() => handleToggleCourt(court._id)}
                   >
-                    <View style={[styles.courtIconCircle, isSelected && styles.courtIconCircleActive, !isSelected && isVip && { backgroundColor: '#FEF3C7' }]}>
+                    <View style={[styles.courtIconCircle, isSelected && styles.courtIconCircleActive, !isSelected && isVip && { backgroundColor: '#FEF3C7' }, isInactive && { backgroundColor: '#E2E8F0' }]}>
                       <Ionicons
-                        name={isSelected ? 'checkbox' : isVip ? 'sparkles' : 'tennisball'}
+                        name={isInactive ? 'construct-outline' : isSelected ? 'checkbox' : isVip ? 'sparkles' : 'tennisball'}
                         size={18}
-                        color={isSelected ? '#FFFFFF' : isVip ? '#B45309' : THEME.colors.primary}
+                        color={isInactive ? '#94A3B8' : isSelected ? '#FFFFFF' : isVip ? '#B45309' : THEME.colors.primary}
                       />
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={[styles.courtSelectName, isSelected && styles.courtSelectNameActive]}>
+                      <Text style={[styles.courtSelectName, isSelected && styles.courtSelectNameActive, isInactive && { color: '#94A3B8' }]}>
                         {courtName}
                       </Text>
                       {isVip && (
@@ -647,8 +720,12 @@ export default function BookingScreen({ route, navigation }) {
                         </View>
                       )}
                     </View>
-                    <Text style={[styles.courtSelectPrice, isSelected && styles.courtSelectPriceActive]}>
-                      {isInactive ? (court.operationalStatus === 'MAINTENANCE' ? 'Đang bảo trì' : 'Tạm đóng') : `${formatCurrency(price)}/h`}
+                    <Text style={[styles.courtSelectPrice, isSelected && styles.courtSelectPriceActive, isInactive && { color: '#94A3B8' }]}>
+                      {isInactive
+                        ? (court.operationalStatus === 'MAINTENANCE' ? 'Đang bảo trì' : 'Tạm đóng')
+                        : price
+                        ? `${formatCurrency(price)}/h`
+                        : 'Tính theo giờ'}
                     </Text>
                   </TouchableOpacity>
                 );
