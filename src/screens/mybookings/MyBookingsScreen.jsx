@@ -239,7 +239,16 @@ export default function MyBookingsScreen({ navigation }) {
 
                 <View style={styles.cardFooter}>
                   <View>
-                    <Text style={styles.totalPriceLabel}>Tổng thanh toán</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.totalPriceLabel}>Tổng thanh toán</Text>
+                      {item.discount > 0 ? (
+                        <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: '#A7F3D0' }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>
+                            Đã giảm {formatCurrency(item.discount)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={styles.totalPriceValue}>{formatCurrency(totalAmount)}</Text>
                   </View>
                   <View style={styles.arrowIcon}>

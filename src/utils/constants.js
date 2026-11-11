@@ -21,14 +21,17 @@ const getDevHost = () => {
 const devHost = getDevHost();
 
 // IP Wi-Fi hiện tại của máy tính
-export const CURRENT_LOCAL_IP = '10.64.172.22';
+export const CURRENT_LOCAL_IP = '192.168.1.3';
 export const BACKEND_PORT = 9999;
 
-// Ưu tiên 1: EXPO_PUBLIC_API_URL trong .env
+const rawEnvUrl = process.env.EXPO_PUBLIC_API_URL;
+const validEnvUrl = rawEnvUrl && !rawEnvUrl.includes('10.64.172.22') ? rawEnvUrl : null;
+
+// Ưu tiên 1: EXPO_PUBLIC_API_URL trong .env (nếu hợp lệ)
 // Ưu tiên 2: Tự động trích xuất IP máy chủ từ Metro bundler (scriptURL)
 // Ưu tiên 3: IP tĩnh hiện tại (CURRENT_LOCAL_IP)
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
+  validEnvUrl ||
   (devHost ? `http://${devHost}:${BACKEND_PORT}/api` : `http://${CURRENT_LOCAL_IP}:${BACKEND_PORT}/api`);
 
 export const API_FALLBACK_URL = `http://localhost:${BACKEND_PORT}/api`;

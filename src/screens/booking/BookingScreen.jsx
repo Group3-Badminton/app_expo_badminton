@@ -54,8 +54,26 @@ export default function BookingScreen({ route, navigation }) {
   const [courts, setCourts] = useState([]);
   const [loadingCourts, setLoadingCourts] = useState(true);
 
-  // Bước 1: Chọn Sân
-  const [selectedCourtId, setSelectedCourtId] = useState(initialCourtId || null);
+  // Bước 1: Chọn Sân (Hỗ trợ chọn nhiều sân thi đấu cùng lúc)
+  const [selectedCourtIds, setSelectedCourtIds] = useState(initialCourtId ? [initialCourtId] : []);
+  const selectedCourts = useMemo(() => {
+    return (Array.isArray(courts) ? courts : []).filter((c) => selectedCourtIds.includes(c._id));
+  }, [courts, selectedCourtIds]);
+  const selectedCourtId = selectedCourtIds[0] || null;
+
+  const handleToggleCourt = (courtId) => {
+    setSelectedCourtIds((prev) => {
+      if (prev.includes(courtId)) {
+        if (prev.length === 1) {
+          Alert.alert('Thông báo', 'Bạn cần chọn ít nhất 1 sân thi đấu trong đơn đặt!');
+          return prev;
+        }
+        return prev.filter((id) => id !== courtId);
+      } else {
+        return [...prev, courtId];
+      }
+    });
+  };
 
   // Bước 2: Chọn Ngày
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -130,25 +148,29 @@ export default function BookingScreen({ route, navigation }) {
   }, [bookedRanges, pickerModalType]);
 
 
-  // Tình trạng lịch đã đặt của sân trong ngày (Chống đặt trùng)
+  // Tình trạng lịch đã đặt của các sân trong ngày (Chống đặt trùng)
   const [bookedRanges, setBookedRanges] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   // Bước 4: Ghi chú
   const [note, setNote] = useState('');
 
-  // Bước 5: Voucher
-  const [voucherCode, setVoucherCode] = useState('');
-  const [validatingVoucher, setValidatingVoucher] = useState(false);
+  // Bước 5: Voucher & Khuyến mãi (Đồng bộ chuẩn Web & Backend)
+  const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [manualVoucherInput, setManualVoucherInput] = useState('');
+  const [validatingManualVoucher, setValidatingManualVoucher] = useState(false);
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherError, setVoucherError] = useState('');
 
-  // Bước 6: Tính giá từ Backend API
+  // Bước 6: Tính giá từ Backend API (Ủy quyền 100% cho Server tính toán)
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [priceData, setPriceData] = useState({
     totalBasePrice: 0,
     discount: 0,
     finalTotalAmount: 0,
+    courtBreakdowns: [],
   });
 
   // Tiến trình đặt đơn
@@ -168,7 +190,7 @@ export default function BookingScreen({ route, navigation }) {
         : [];
       setCourts(list);
       if (list.length > 0) {
-        setSelectedCourtId((prev) => prev || initialCourtId || list[0]._id);
+        setSelectedCourtIds((prev) => (prev.length > 0 ? prev : [initialCourtId || list[0]._id]));
       }
     } catch (e) {
       console.warn('Lỗi tải danh sách sân booking:', e);
@@ -181,28 +203,39 @@ export default function BookingScreen({ route, navigation }) {
     fetchCourts();
   }, [fetchCourts]);
 
-  // Cập nhật selectedCourtId nếu có truyền qua route
+  // Cập nhật selectedCourtIds nếu có truyền qua route
   useEffect(() => {
     if (route.params?.initialCourtId) {
-      setSelectedCourtId(route.params.initialCourtId);
+      setSelectedCourtIds([route.params.initialCourtId]);
     }
   }, [route.params?.initialCourtId]);
 
-  // 2. Tải tình trạng khung giờ đã đặt của sân theo ngày (Kiểm tra lịch trùng)
+  // 2. Tải tình trạng khung giờ đã đặt của các sân theo ngày (Kiểm tra lịch trùng)
   const fetchAvailability = useCallback(async () => {
-    if (!selectedCourtId || !selectedDate) return;
+    if (selectedCourtIds.length === 0 || !selectedDate) return;
     try {
       setLoadingAvailability(true);
-      const res = await bookingService.getCourtAvailability(selectedCourtId, selectedDate);
-      const ranges = res?.data?.bookedRanges || [];
-      setBookedRanges(ranges);
+      const responses = await Promise.all(
+        selectedCourtIds.map((cId) =>
+          bookingService.getCourtAvailability(cId, selectedDate).catch(() => null)
+        )
+      );
+      const allRanges = [];
+      responses.forEach((res, index) => {
+        const ranges = res?.data?.bookedRanges || [];
+        const cId = selectedCourtIds[index];
+        ranges.forEach((r) => {
+          allRanges.push({ ...r, courtId: cId });
+        });
+      });
+      setBookedRanges(allRanges);
     } catch (e) {
       console.warn('Lỗi tải tình trạng lịch đặt sân:', e);
       setBookedRanges([]);
     } finally {
       setLoadingAvailability(false);
     }
-  }, [selectedCourtId, selectedDate]);
+  }, [selectedCourtIds, selectedDate]);
 
   useEffect(() => {
     fetchAvailability();
@@ -227,21 +260,29 @@ export default function BookingScreen({ route, navigation }) {
     }
   };
 
-  // Kiểm tra xung đột (trùng giờ) giữa khoảng đang chọn với các đơn đã đặt
-  const isConflictWithBooked = useMemo(() => {
-    if (!startTime || !endTime || bookedRanges.length === 0) return false;
+  // Kiểm tra xung đột (trùng giờ) giữa khoảng đang chọn với các đơn đã đặt của từng sân
+  const conflictedCourtNames = useMemo(() => {
+    if (!startTime || !endTime || bookedRanges.length === 0) return [];
     const sMin = parseTimeToMinutes(startTime);
     const eMin = parseTimeToMinutes(endTime);
-    return bookedRanges.some((range) => {
+    const conflictCourtIds = new Set();
+    bookedRanges.forEach((range) => {
       const bStart = parseTimeToMinutes(range.startTime);
       const bEnd = parseTimeToMinutes(range.endTime);
-      return sMin < bEnd && eMin > bStart;
+      if (sMin < bEnd && eMin > bStart) {
+        conflictCourtIds.add(range.courtId);
+      }
     });
-  }, [startTime, endTime, bookedRanges]);
+    return courts
+      .filter((c) => conflictCourtIds.has(c._id))
+      .map((c) => c.courtName || c.name || `Sân ${c.courtNumber}`);
+  }, [startTime, endTime, bookedRanges, courts]);
 
-  // 3. Tính toán tiền tự động từ Backend API chuẩn xác
+  const isConflictWithBooked = conflictedCourtNames.length > 0;
+
+  // 3. Tính toán tiền tự động từ Backend API chuẩn xác (Single Source of Truth)
   const calculatePrice = useCallback(async () => {
-    if (!selectedCourtId || !startTime || !endTime) return;
+    if (selectedCourts.length === 0 || !startTime || !endTime) return;
 
     const sMin = parseTimeToMinutes(startTime);
     const eMin = parseTimeToMinutes(endTime);
@@ -249,22 +290,20 @@ export default function BookingScreen({ route, navigation }) {
 
     try {
       setLoadingPrice(true);
-      // Gửi cả courtId, startTime, endTime và mảng courtOrders chuẩn theo Backend
-      const payload = {
+      const courtOrders = selectedCourts.map((c) => ({
+        courtId: c._id,
         bookingDate: selectedDate,
-        courtId: selectedCourtId,
-        courtIds: [selectedCourtId],
         startTime,
         endTime,
-        courtOrders: [
-          {
-            courtId: selectedCourtId,
-            bookingDate: selectedDate,
-            startTime,
-            endTime,
-          },
-        ],
-        voucherCode: appliedVoucher?.code || undefined,
+      }));
+      const payload = {
+        bookingDate: selectedDate,
+        courtOrders,
+        courtIds: selectedCourts.map((c) => c._id),
+        courtId: selectedCourts[0]?._id,
+        startTime,
+        endTime,
+        voucherCode: appliedVoucher ? (appliedVoucher.code || appliedVoucher.voucherCode) : undefined,
       };
 
       const res = await bookingService.calculateBookingPrice(payload);
@@ -274,71 +313,178 @@ export default function BookingScreen({ route, navigation }) {
           totalBasePrice: data.totalBasePrice || 0,
           discount: data.discount || 0,
           finalTotalAmount: data.finalTotalAmount || 0,
+          courtBreakdowns: data.courtBreakdowns || [],
         });
       }
     } catch (err) {
-      // Fallback tính giá cơ bản nếu API tính tiền gặp ngoại lệ
-      const selectedCourt = courts.find((c) => c._id === selectedCourtId);
-      const rawType = (selectedCourt?.courtType || selectedCourt?.type || 'STANDARD').toUpperCase();
-      const defaultPrice = rawType.includes('VIP') ? 130000 : rawType.includes('PREMIUM') ? 160000 : 80000;
-      const baseHourly = selectedCourt?.pricePerHour || selectedCourt?.basePrice || defaultPrice;
-      const hours = (eMin - sMin) / 60;
-      const total = Math.round(hours * baseHourly);
-      const discount = appliedVoucher
-        ? appliedVoucher.discountType === 'Percentage'
-          ? Math.round((total * appliedVoucher.discountValue) / 100)
-          : appliedVoucher.discountValue
-        : 0;
-      setPriceData({
-        totalBasePrice: total,
-        discount: discount,
-        finalTotalAmount: Math.max(0, total - discount),
-      });
+      console.warn('Lỗi tính giá chi tiết từ Backend:', err);
     } finally {
       setLoadingPrice(false);
     }
-  }, [selectedCourtId, selectedDate, startTime, endTime, appliedVoucher, courts]);
+  }, [selectedCourts, selectedDate, startTime, endTime, appliedVoucher]);
 
   useEffect(() => {
     calculatePrice();
   }, [calculatePrice]);
 
-  // 4. Áp dụng mã Voucher
-  const handleApplyVoucher = async () => {
-    if (!voucherCode.trim()) return;
-
+  // 4. Mở Modal và lấy danh sách Voucher khả dụng cho đơn hàng
+  const handleOpenVoucherModal = async () => {
+    setVoucherModalOpen(true);
+    setLoadingVouchers(true);
+    setVoucherError('');
     try {
-      setValidatingVoucher(true);
-      setVoucherError('');
-      const res = await bookingService.validateVoucher(
-        voucherCode.trim().toUpperCase(),
-        priceData.totalBasePrice
-      );
-
-      const voucher = res.data || res.voucher || {
-        code: voucherCode.trim().toUpperCase(),
-        discountValue: res.discountValue || 20000,
-        discountType: res.discountType || 'FixedAmount',
-      };
-
-      setAppliedVoucher(voucher);
-      Alert.alert('Thành công', `Đã áp dụng mã giảm giá ${voucher.code}`);
-    } catch (err) {
-      const msg = err.response?.data?.message || 'Mã giảm giá không hợp lệ hoặc đã hết lượt dùng.';
-      setVoucherError(msg);
-      setAppliedVoucher(null);
+      const courtTypes = selectedCourts.map((c) => (c.courtType || 'STANDARD').toUpperCase());
+      const res = await bookingService.getAvailableVouchers({
+        orderAmount: priceData.totalBasePrice,
+        courtBreakdowns: priceData.courtBreakdowns || [],
+        courtTypes,
+      });
+      if (res.success && Array.isArray(res.data)) {
+        setAvailableVouchers(res.data);
+      } else if (Array.isArray(res)) {
+        setAvailableVouchers(res);
+      } else {
+        setAvailableVouchers([]);
+      }
+    } catch (e) {
+      console.warn('Không thể tải danh sách voucher:', e);
+      setAvailableVouchers([]);
     } finally {
-      setValidatingVoucher(false);
+      setLoadingVouchers(false);
     }
   };
 
+  // Chọn voucher từ danh sách
+  const handleSelectVoucher = (voucher) => {
+    const code = voucher.code || voucher.voucherCode;
+    setAppliedVoucher({
+      ...voucher,
+      code,
+    });
+    setVoucherModalOpen(false);
+    Alert.alert('Thành công', `Đã áp dụng mã giảm giá ${code}!`);
+  };
+
+  // Áp dụng mã Voucher nhập tay
+  const handleApplyManualVoucher = async () => {
+    if (!manualVoucherInput.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập mã voucher!');
+      return;
+    }
+    const cleanCode = manualVoucherInput.trim().toUpperCase();
+    try {
+      setValidatingManualVoucher(true);
+      setVoucherError('');
+      const courtTypes = selectedCourts.map((c) => (c.courtType || 'STANDARD').toUpperCase());
+      const res = await bookingService.validateVoucher(cleanCode, priceData.totalBasePrice, {
+        courtBreakdowns: priceData.courtBreakdowns || [],
+        courtTypes,
+      });
+      const data = res.data || res;
+      setAppliedVoucher({
+        ...data,
+        code: data.voucherCode || data.code || cleanCode,
+      });
+      setManualVoucherInput('');
+      setVoucherModalOpen(false);
+      Alert.alert('Thành công', `Đã áp dụng mã giảm giá ${cleanCode}!`);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Mã giảm giá không hợp lệ hoặc không đủ điều kiện!';
+      setVoucherError(msg);
+    } finally {
+      setValidatingManualVoucher(false);
+    }
+  };
+
+  // Xóa mã giảm giá đang áp dụng
   const handleRemoveVoucher = () => {
     setAppliedVoucher(null);
-    setVoucherCode('');
+    setManualVoucherInput('');
     setVoucherError('');
   };
 
-  // 5. Xác nhận đặt sân
+  // 5. Thực hiện tạo đơn đặt sân (có xử lý Race Condition khi voucher hết hạn hoặc hết lượt)
+  const executeCreateBooking = async (targetVoucherCode) => {
+    setSubmitting(true);
+    try {
+      const courtOrders = selectedCourts.map((c) => ({
+        courtId: c._id,
+        startTime,
+        endTime,
+      }));
+
+      const bookingPayload = {
+        bookingDate: selectedDate,
+        courtOrders,
+        courtIds: selectedCourts.map((c) => c._id),
+        courtId: selectedCourts[0]?._id,
+        startTime,
+        endTime,
+        note: note.trim(),
+        voucherCode: targetVoucherCode,
+        paymentMethod: 'CASH',
+        customerPhone: user?.phoneNumber || user?.phone,
+        customerName: user?.fullName || user?.name,
+      };
+
+      const result = await bookingService.createBooking(bookingPayload);
+      const created = result.data || result;
+
+      Alert.alert(
+        'Đặt sân thành công 🎉',
+        `Mã đơn đặt: ${created.bookingCode || created._id || 'Đã ghi nhận'}\nSố lượng: ${selectedCourts.length} sân\nVui lòng đến sân đúng giờ để nhận sân!`,
+        [
+          {
+            text: 'Xem đơn của tôi',
+            onPress: () => navigation.navigate('MyBookings'),
+          },
+          {
+            text: 'Về trang chủ',
+            onPress: () => navigation.navigate('Home'),
+          },
+        ]
+      );
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Không thể đặt sân. Có thể khung giờ này đã có người đặt, vui lòng chọn khung giờ khác!';
+
+      // Bắt ngoại lệ Race Condition khi mã giảm giá vừa hết lượt hoặc không còn hiệu lực
+      const isVoucherErr =
+        targetVoucherCode &&
+        /voucher|mã giảm giá|hết lượt|lượt dùng|không hợp lệ/i.test(msg);
+
+      if (isVoucherErr) {
+        Alert.alert(
+          'Mã giảm giá không khả dụng',
+          `Mã "${targetVoucherCode}" vừa hết lượt sử dụng hoặc không còn hiệu lực.\nBạn có muốn tiếp tục đặt sân với giá gốc (${formatCurrency(priceData.totalBasePrice)}) không?`,
+          [
+            {
+              text: 'Chọn mã khác',
+              style: 'cancel',
+              onPress: () => {
+                setAppliedVoucher(null);
+                handleOpenVoucherModal();
+              },
+            },
+            {
+              text: 'Đặt với giá gốc',
+              onPress: () => {
+                setAppliedVoucher(null);
+                executeCreateBooking(undefined);
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Không thể đặt sân', msg);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleConfirmBooking = async () => {
     if (!isAuthenticated) {
       Alert.alert(
@@ -352,8 +498,8 @@ export default function BookingScreen({ route, navigation }) {
       return;
     }
 
-    if (!selectedCourtId) {
-      Alert.alert('Thông báo', 'Vui lòng chọn sân trước khi đặt.');
+    if (selectedCourts.length === 0) {
+      Alert.alert('Thông báo', 'Vui lòng chọn ít nhất 1 sân trước khi đặt.');
       return;
     }
 
@@ -386,52 +532,13 @@ export default function BookingScreen({ route, navigation }) {
     if (isConflictWithBooked) {
       Alert.alert(
         'Sân đã có người đặt',
-        `Khung giờ ${startTime} - ${endTime} trên sân này đã bị trùng lịch với đơn đặt trước. Vui lòng chọn khung giờ khác!`
+        `Khung giờ ${startTime} - ${endTime} trên sân (${conflictedCourtNames.join(', ')}) đã bị trùng lịch với đơn đặt trước. Vui lòng chọn khung giờ khác!`
       );
       return;
     }
 
-    try {
-      setSubmitting(true);
-      const bookingPayload = {
-        bookingDate: selectedDate,
-        courtId: selectedCourtId,
-        courtIds: [selectedCourtId],
-        startTime,
-        endTime,
-        note: note.trim(),
-        voucherCode: appliedVoucher?.code || undefined,
-        paymentMethod: 'CASH',
-        customerPhone: user?.phoneNumber || user?.phone,
-        customerName: user?.fullName || user?.name,
-      };
-
-      const result = await bookingService.createBooking(bookingPayload);
-      const created = result.data || result;
-
-      Alert.alert(
-        'Đặt sân thành công 🎉',
-        `Mã đơn đặt: ${created.bookingCode || created._id || 'Đã ghi nhận'}\nVui lòng đến sân đúng giờ để check-in!`,
-        [
-          {
-            text: 'Xem đơn của tôi',
-            onPress: () => navigation.navigate('MyBookings'),
-          },
-          {
-            text: 'Về trang chủ',
-            onPress: () => navigation.navigate('Home'),
-          },
-        ]
-      );
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Không thể đặt sân. Có thể khung giờ này đã có người đặt, vui lòng chọn khung giờ khác!';
-      Alert.alert('Không thể đặt sân', msg);
-    } finally {
-      setSubmitting(false);
-    }
+    const targetCode = appliedVoucher ? (appliedVoucher.code || appliedVoucher.voucherCode) : undefined;
+    await executeCreateBooking(targetCode);
   };
 
   // 7 ngày tiếp theo để chọn
@@ -476,21 +583,39 @@ export default function BookingScreen({ route, navigation }) {
       <HeaderBar title="Đặt sân online" subtitle="Chọn sân, khung giờ và hoàn tất đặt chỗ" />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Bước 1: Chọn Sân Cầu Lông */}
+        {/* Bước 1: Chọn Sân Cầu Lông (Hỗ trợ đặt nhiều sân cùng lúc) */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
             <View style={styles.stepBadge}>
               <Text style={styles.stepBadgeText}>1</Text>
             </View>
-            <Text style={styles.sectionTitle}>Chọn sân thi đấu</Text>
+            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.sectionTitle}>Chọn sân thi đấu</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.colors.primaryDark }}>
+                Đã chọn: {selectedCourts.length} sân
+              </Text>
+            </View>
           </View>
 
           {loadingCourts ? (
             <ActivityIndicator size="small" color={THEME.colors.primary} style={{ marginVertical: 12 }} />
+          ) : courts.length === 0 ? (
+            <View style={{ padding: 16, alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' }}>
+              <Ionicons name="alert-circle-outline" size={28} color="#EF4444" />
+              <Text style={{ fontSize: 13, color: '#64748B', marginTop: 6, textAlign: 'center' }}>
+                Không thể tải danh sách sân. Vui lòng kiểm tra kết nối Backend!
+              </Text>
+              <TouchableOpacity
+                onPress={fetchCourts}
+                style={{ marginTop: 10, paddingVertical: 6, paddingHorizontal: 14, backgroundColor: THEME.colors.primary, borderRadius: 6 }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>Tải lại</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courtScroll}>
               {(Array.isArray(courts) ? courts : []).map((court) => {
-                const isSelected = selectedCourtId === court._id;
+                const isSelected = selectedCourtIds.includes(court._id);
                 const courtName = court.courtName || court.name || `Sân ${court.courtNumber}`;
                 const rawType = (court.courtType || court.type || 'STANDARD').toUpperCase();
                 const isVip = rawType.includes('VIP');
@@ -503,11 +628,11 @@ export default function BookingScreen({ route, navigation }) {
                     activeOpacity={isInactive ? 1 : 0.8}
                     disabled={isInactive}
                     style={[styles.courtSelectCard, isSelected && styles.courtSelectCardActive, isInactive && { opacity: 0.55, backgroundColor: '#F3F4F6' }]}
-                    onPress={() => setSelectedCourtId(court._id)}
+                    onPress={() => handleToggleCourt(court._id)}
                   >
                     <View style={[styles.courtIconCircle, isSelected && styles.courtIconCircleActive, !isSelected && isVip && { backgroundColor: '#FEF3C7' }]}>
                       <Ionicons
-                        name={isVip ? 'sparkles' : 'tennisball'}
+                        name={isSelected ? 'checkbox' : isVip ? 'sparkles' : 'tennisball'}
                         size={18}
                         color={isSelected ? '#FFFFFF' : isVip ? '#B45309' : THEME.colors.primary}
                       />
@@ -633,53 +758,56 @@ export default function BookingScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Bước 4: Mã Giảm Giá Voucher */}
+        {/* Bước 4: Mã Giảm Giá Voucher (Đồng bộ Web & Backend) */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
             <View style={styles.stepBadge}>
               <Text style={styles.stepBadgeText}>4</Text>
             </View>
-            <Text style={styles.sectionTitle}>Mã giảm giá (Voucher)</Text>
+            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.sectionTitle}>Mã giảm giá (Voucher)</Text>
+              <TouchableOpacity onPress={handleOpenVoucherModal} style={styles.viewVouchersLink}>
+                <Ionicons name="pricetags-outline" size={15} color={THEME.colors.primary} />
+                <Text style={styles.viewVouchersLinkText}>Chọn ưu đãi</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {appliedVoucher ? (
             <View style={styles.appliedVoucherBox}>
               <View style={styles.appliedVoucherInfo}>
                 <Ionicons name="pricetag" size={18} color={THEME.colors.primary} />
-                <Text style={styles.appliedVoucherCode}>{appliedVoucher.code}</Text>
-                <Text style={styles.appliedVoucherValue}>
-                  - {formatCurrency(priceData.discount)}
-                </Text>
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={styles.appliedVoucherCode}>{appliedVoucher.code || appliedVoucher.voucherCode}</Text>
+                  {appliedVoucher.name || appliedVoucher.voucherName ? (
+                    <Text style={styles.appliedVoucherName} numberOfLines={1}>
+                      {appliedVoucher.name || appliedVoucher.voucherName}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
-              <TouchableOpacity onPress={handleRemoveVoucher}>
-                <Ionicons name="close-circle" size={22} color={THEME.colors.textMuted} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={styles.appliedVoucherValue}>
+                  -{formatCurrency(priceData.discount)}
+                </Text>
+                <TouchableOpacity onPress={handleRemoveVoucher} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={22} color={THEME.colors.danger} />
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
-            <View style={styles.voucherInputRow}>
-              <TextInput
-                style={styles.voucherInput}
-                placeholder="Nhập mã voucher (ví dụ: SUMMER20)"
-                placeholderTextColor={THEME.colors.textMuted}
-                value={voucherCode}
-                onChangeText={(txt) => {
-                  setVoucherCode(txt);
-                  if (voucherError) setVoucherError('');
-                }}
-                autoCapitalize="characters"
-              />
-              <TouchableOpacity
-                style={styles.applyBtn}
-                onPress={handleApplyVoucher}
-                disabled={validatingVoucher}
-              >
-                {validatingVoucher ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.applyBtnText}>Áp dụng</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.selectVoucherBtn} onPress={handleOpenVoucherModal}>
+              <View style={styles.selectVoucherBtnLeft}>
+                <View style={styles.voucherIconCircle}>
+                  <Ionicons name="ticket-outline" size={20} color={THEME.colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.selectVoucherTitle}>Chọn hoặc nhập mã giảm giá</Text>
+                  <Text style={styles.selectVoucherSubtitle}>Tiết kiệm chi phí khi đặt sân online</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={THEME.colors.textMuted} />
+            </TouchableOpacity>
           )}
 
           {voucherError ? (
@@ -704,6 +832,13 @@ export default function BookingScreen({ route, navigation }) {
         {/* Thẻ Tổng Kết Chi Phí */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryHeader}>Chi tiết thanh toán</Text>
+
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Số lượng sân:</Text>
+            <Text style={styles.summaryValue}>
+              {selectedCourts.length} sân ({selectedCourts.map((c) => c.courtName || c.name || `Sân ${c.courtNumber}`).join(', ')})
+            </Text>
+          </View>
 
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Thời lượng thuê sân:</Text>
@@ -864,6 +999,193 @@ export default function BookingScreen({ route, navigation }) {
                   <Text style={styles.pickerConfirmText}>Xác nhận</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Chọn Voucher / Mã Giảm Giá */}
+      <Modal
+        visible={voucherModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setVoucherModalOpen(false)}
+      >
+        <View style={styles.voucherModalOverlay}>
+          <View style={styles.voucherModalCard}>
+            <View style={styles.voucherModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.voucherModalTitle}>Khuyến mãi & Mã giảm giá</Text>
+                <Text style={styles.voucherModalSubtitle}>
+                  Áp dụng cho đơn hàng {formatCurrency(priceData.totalBasePrice)}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setVoucherModalOpen(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Input nhập mã thủ công */}
+            <View style={styles.manualInputContainer}>
+              <TextInput
+                style={styles.manualVoucherInput}
+                placeholder="Nhập mã ưu đãi (VD: SUMMER20)"
+                placeholderTextColor={THEME.colors.textMuted}
+                value={manualVoucherInput}
+                onChangeText={(text) => {
+                  setManualVoucherInput(text);
+                  if (voucherError) setVoucherError('');
+                }}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.manualApplyBtn,
+                  (!manualVoucherInput.trim() || validatingManualVoucher) && styles.manualApplyBtnDisabled,
+                ]}
+                onPress={handleApplyManualVoucher}
+                disabled={!manualVoucherInput.trim() || validatingManualVoucher}
+              >
+                {validatingManualVoucher ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.manualApplyBtnText}>Áp dụng</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {voucherError ? (
+              <Text style={styles.modalVoucherErrorText}>{voucherError}</Text>
+            ) : null}
+
+            <View style={styles.voucherSectionTitleRow}>
+              <Text style={styles.voucherSectionTitle}>Mã ưu đãi phù hợp</Text>
+              <Text style={styles.voucherCountBadge}>
+                {availableVouchers.filter((v) => v.isEligible).length} khả dụng
+              </Text>
+            </View>
+
+            {loadingVouchers ? (
+              <View style={styles.voucherLoadingBox}>
+                <ActivityIndicator size="small" color={THEME.colors.primary} />
+                <Text style={styles.voucherLoadingText}>Đang kiểm tra mã giảm giá phù hợp...</Text>
+              </View>
+            ) : availableVouchers.length === 0 ? (
+              <View style={styles.voucherEmptyBox}>
+                <Ionicons name="gift-outline" size={44} color="#CBD5E1" />
+                <Text style={styles.voucherEmptyText}>
+                  Hiện chưa có mã giảm giá nào áp dụng cho đơn đặt này.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.voucherListScroll} showsVerticalScrollIndicator={false}>
+                {availableVouchers.map((v) => {
+                  const currentCode = appliedVoucher?.code || appliedVoucher?.voucherCode;
+                  const vCode = v.code || v.voucherCode;
+                  const isCurrent = currentCode === vCode;
+                  const discountStr =
+                    v.discountType === 'PERCENTAGE'
+                      ? `Giảm ${v.discountValue}%`
+                      : `Giảm ${formatCurrency(v.discountValue)}`;
+                  const maxDiscountStr =
+                    (v.maxDiscountAmount > 0 || v.maxDiscount > 0)
+                      ? ` (Tối đa ${formatCurrency(v.maxDiscountAmount || v.maxDiscount)})`
+                      : '';
+                  const minOrder = v.minInvoiceAmount || v.minOrderAmount || 0;
+
+                  return (
+                    <View
+                      key={v._id || vCode}
+                      style={[
+                        styles.voucherCardItem,
+                        isCurrent && styles.voucherCardItemCurrent,
+                        !v.isEligible && styles.voucherCardItemDisabled,
+                      ]}
+                    >
+                      <View style={styles.voucherCardLeft}>
+                        <View style={styles.voucherTagRow}>
+                          <View
+                            style={[
+                              styles.voucherCodeBadge,
+                              !v.isEligible && styles.voucherCodeBadgeDisabled,
+                              isCurrent && styles.voucherCodeBadgeCurrent,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.voucherCodeBadgeText,
+                                isCurrent && styles.voucherCodeBadgeTextCurrent,
+                              ]}
+                            >
+                              {vCode}
+                            </Text>
+                          </View>
+                          <Text style={styles.voucherItemName} numberOfLines={1}>
+                            {v.name || v.voucherName || 'Ưu đãi đặt sân'}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.voucherDiscountValue}>
+                          {discountStr} {maxDiscountStr}
+                        </Text>
+
+                        {v.description ? (
+                          <Text style={styles.voucherItemDesc} numberOfLines={2}>
+                            {v.description}
+                          </Text>
+                        ) : null}
+
+                        {minOrder > 0 && (
+                          <Text style={styles.voucherConditionText}>
+                            Đơn tối thiểu: {formatCurrency(minOrder)}
+                          </Text>
+                        )}
+
+                        {v.applicableCourtTypes && !v.applicableCourtTypes.includes('ALL') && (
+                          <Text style={styles.voucherCourtTypesText}>
+                            Áp dụng: {v.applicableCourtTypes.join(', ')}
+                          </Text>
+                        )}
+
+                        {!v.isEligible && v.ineligibleReason && (
+                          <Text style={styles.voucherIneligibleReason}>
+                            ⚠️ {v.ineligibleReason}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.voucherCardRight}>
+                        {isCurrent ? (
+                          <View style={styles.currentBadge}>
+                            <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                            <Text style={styles.currentBadgeText}>Đang dùng</Text>
+                          </View>
+                        ) : v.isEligible ? (
+                          <TouchableOpacity
+                            style={styles.applyVoucherBtn}
+                            onPress={() => handleSelectVoucher(v)}
+                          >
+                            <Text style={styles.applyVoucherBtnText}>Áp dụng</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <View style={styles.disabledVoucherBtn}>
+                            <Text style={styles.disabledVoucherBtnText}>Chưa đủ ĐK</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <View style={styles.voucherModalFooter}>
+              <TouchableOpacity
+                style={styles.closeModalBottomBtn}
+                onPress={() => setVoucherModalOpen(false)}
+              >
+                <Text style={styles.closeModalBottomBtnText}>Đóng</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1140,6 +1462,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  viewVouchersLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewVouchersLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.colors.primary,
+  },
   appliedVoucherBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1158,19 +1492,308 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: THEME.colors.primaryDark,
-    marginLeft: 6,
-    marginRight: 10,
+  },
+  appliedVoucherName: {
+    fontSize: 11,
+    color: THEME.colors.textSecondary,
+    maxWidth: 160,
   },
   appliedVoucherValue: {
     fontSize: 13,
     color: THEME.colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  selectVoucherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: THEME.colors.surface,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+    borderRadius: THEME.radius.lg,
+    paddingHorizontal: THEME.spacing.md,
+    paddingVertical: 12,
+  },
+  selectVoucherBtnLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  voucherIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectVoucherTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+  },
+  selectVoucherSubtitle: {
+    fontSize: 11,
+    color: THEME.colors.textMuted,
+    marginTop: 2,
   },
   voucherErrorText: {
     fontSize: 12,
     color: THEME.colors.danger,
     marginTop: 6,
     marginLeft: 2,
+  },
+  voucherModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  voucherModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    padding: 20,
+    ...THEME.shadows.card,
+  },
+  voucherModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  voucherModalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  voucherModalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  manualInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
+  manualVoucherInput: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  manualApplyBtn: {
+    backgroundColor: THEME.colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 44,
+  },
+  manualApplyBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  manualApplyBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalVoucherErrorText: {
+    fontSize: 12,
+    color: THEME.colors.danger,
+    marginTop: 6,
+  },
+  voucherSectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  voucherSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  voucherCountBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  voucherLoadingBox: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voucherLoadingText: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 10,
+  },
+  voucherEmptyBox: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voucherEmptyText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 10,
+    maxWidth: 240,
+  },
+  voucherListScroll: {
+    maxHeight: 320,
+  },
+  voucherCardItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  voucherCardItemCurrent: {
+    borderColor: '#059669',
+    backgroundColor: '#F0FDF4',
+  },
+  voucherCardItemDisabled: {
+    opacity: 0.65,
+    backgroundColor: '#FAFAFA',
+  },
+  voucherCardLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  voucherCardRight: {
+    alignItems: 'flex-end',
+  },
+  voucherTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  voucherCodeBadge: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  voucherCodeBadgeCurrent: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  voucherCodeBadgeDisabled: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  voucherCodeBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  voucherCodeBadgeTextCurrent: {
+    color: '#FFFFFF',
+  },
+  voucherItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+  },
+  voucherDiscountValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+    marginTop: 2,
+  },
+  voucherItemDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  voucherConditionText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  voucherCourtTypesText: {
+    fontSize: 11,
+    color: '#6366F1',
+    marginTop: 2,
+  },
+  voucherIneligibleReason: {
+    fontSize: 11,
+    color: '#EF4444',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  currentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  currentBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  applyVoucherBtn: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  applyVoucherBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  disabledVoucherBtn: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  disabledVoucherBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  voucherModalFooter: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 10,
+  },
+  closeModalBottomBtn: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  closeModalBottomBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
   },
   noteInput: {
     backgroundColor: THEME.colors.surface,

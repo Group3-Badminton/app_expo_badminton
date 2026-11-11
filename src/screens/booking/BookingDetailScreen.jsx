@@ -308,6 +308,25 @@ export default function BookingDetailScreen({ route, navigation }) {
 
           <View style={styles.divider} />
 
+          {booking.discount > 0 ? (
+            <>
+              <View style={[styles.row, { marginBottom: 6 }]}>
+                <Text style={styles.detailLabel}>TIỀN SÂN GỐC</Text>
+                <Text style={[styles.detailValue, { fontWeight: '600' }]}>
+                  {formatCurrency(booking.price || (totalAmount + booking.discount))}
+                </Text>
+              </View>
+              <View style={[styles.row, { marginBottom: 6 }]}>
+                <Text style={[styles.detailLabel, { color: THEME.colors.primary }]}>
+                  GIẢM GIÁ VOUCHER {booking.voucherId?.code || booking.voucherId?.voucherCode ? `(${booking.voucherId?.code || booking.voucherId?.voucherCode})` : ''}
+                </Text>
+                <Text style={[styles.detailValue, { color: THEME.colors.primary, fontWeight: '700' }]}>
+                  -{formatCurrency(booking.discount)}
+                </Text>
+              </View>
+            </>
+          ) : null}
+
           <View style={styles.row}>
             <Text style={styles.totalLabel}>TỔNG TIỀN VÉ</Text>
             <Text style={styles.totalValue}>{formatCurrency(totalAmount)}</Text>
