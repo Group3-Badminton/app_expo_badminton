@@ -39,6 +39,12 @@ export const bookingService = {
     return res.data;
   },
 
+  // Lấy danh sách mã giảm giá khả dụng / phù hợp với đơn đặt
+  getAvailableVouchers: async (payload = {}) => {
+    const res = await client.post('/bookings/available-vouchers', payload);
+    return res.data;
+  },
+
   // Kiểm tra và áp dụng mã giảm giá voucher
   validateVoucher: async (voucherCode, orderAmount = 0, context = {}) => {
     const res = await client.post('/bookings/validate-voucher', {
