@@ -32,6 +32,7 @@ export default function HomeScreen({ navigation }) {
   ) + 16;
 
   const [courts, setCourts] = useState([]);
+  const [referencePrices, setReferencePrices] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -118,6 +119,38 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     fetchCourts();
   }, [fetchCourts]);
+
+  // Tải bảng giá tham khảo thực tế từ backend theo từng sân (Đồng bộ chuẩn DB PriceRule)
+  useEffect(() => {
+    const fetchReferencePrices = async () => {
+      if (!Array.isArray(courts) || courts.length === 0) return;
+      try {
+        const todayStr = dayjs().format('YYYY-MM-DD');
+        const courtOrders = courts.map((c) => ({
+          courtId: c._id,
+          startTime: '08:00',
+          endTime: '09:00',
+        }));
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders,
+          bookingDate: todayStr,
+        });
+        const breakdowns = res?.data?.courtBreakdowns || res?.courtBreakdowns || [];
+        if (Array.isArray(breakdowns)) {
+          const map = {};
+          breakdowns.forEach((cb) => {
+            if (cb.courtId) {
+              map[cb.courtId] = cb.totalAmount;
+            }
+          });
+          setReferencePrices(map);
+        }
+      } catch (err) {
+        console.warn('Lỗi tải bảng giá tham khảo từ backend:', err);
+      }
+    };
+    fetchReferencePrices();
+  }, [courts]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -315,8 +348,7 @@ export default function HomeScreen({ navigation }) {
             const isVip = rawType.includes('VIP');
             const isPremium = rawType.includes('PREMIUM') || rawType.includes('THI ĐẤU');
             const courtType = isVip ? 'Sân VIP' : isPremium ? 'Sân Thi Đấu' : 'Sân tiêu chuẩn';
-            const defaultPrice = isVip ? 130000 : isPremium ? 160000 : 80000;
-            const price = court.pricePerHour || court.basePrice || defaultPrice;
+            const price = referencePrices[court._id] || court.pricePerHour || court.basePrice;
             const isInactive = court.status === 'INACTIVE' || court.status === 'Inactive' || court.operationalStatus === 'MAINTENANCE';
             const isAvailable = !isInactive;
             const statusLabel = court.operationalStatus === 'MAINTENANCE' ? 'Bảo trì' : !isAvailable ? 'Tạm đóng' : 'Sẵn sàng';
@@ -364,7 +396,7 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.courtFooter}>
                   <View>
                     <Text style={styles.priceLabel}>Giá tham khảo</Text>
-                    <Text style={styles.priceValue}>{formatCurrency(price)}/h</Text>
+                    <Text style={styles.priceValue}>{price ? `${formatCurrency(price)}/h` : 'Tính theo giờ'}</Text>
                   </View>
                   <TouchableOpacity
                     style={[
