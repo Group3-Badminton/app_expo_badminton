@@ -33,9 +33,13 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
       setErrorMessage('');
       await login({ email: email.trim(), password });
-      Alert.alert('Thành công', 'Đăng nhập thành công!', [
-        { text: 'OK', onPress: () => navigation.navigate('Main') },
-      ]);
+      setLoading(false);
+      // Chuyển trang ngay lập tức (tránh bị kẹt trên Web hoặc khi Alert không kích hoạt callback)
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Main');
+      }
     } catch (err) {
       const msg =
         err.customMessage ||

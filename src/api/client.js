@@ -33,9 +33,9 @@ client.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      error.customMessage = 'Quá thời gian kết nối (5s). Vui lòng kiểm tra lại kết nối mạng hoặc xem Backend Server đã bật chưa!';
+      error.customMessage = `Quá thời gian kết nối (5s) tới: ${API_BASE_URL}. Vui lòng kiểm tra lại kết nối mạng hoặc xem Backend Server đã bật chưa!`;
     } else if (!error.response) {
-      error.customMessage = 'Không thể kết nối đến máy chủ. Hãy đảm bảo API Backend (port 9999) đang chạy!';
+      error.customMessage = `Không thể kết nối đến máy chủ (${API_BASE_URL}). Hãy đảm bảo API Backend (port 9999) đang chạy!`;
     } else if (error.response.status === 401) {
       // Hết hạn phiên đăng nhập
       await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
