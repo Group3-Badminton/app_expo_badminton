@@ -15,11 +15,7 @@ import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-
-// Cấu hình EmailJS đồng bộ với bản Web
-const EMAILJS_SERVICE_ID = 'service_ugdo9iz';
-const EMAILJS_TEMPLATE_ID = 'template_8bwu5in';
-const EMAILJS_PUBLIC_KEY = 'xWKN2ZcMfxpmGDmHA';
+import { sendOtpEmail } from '../../services/emailService';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const { sendOtp, verifyOtp, resetPassword } = useAuth();
@@ -49,35 +45,6 @@ export default function ForgotPasswordScreen({ navigation }) {
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // Gửi email qua EmailJS API
-  const sendEmailViaEmailJS = async (recipientEmail, recipientName, generatedOtp, expiryDate) => {
-    try {
-      const expiryTime = expiryDate
-        ? new Date(expiryDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-        : new Date(Date.now() + 10 * 60 * 1000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-
-      await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          service_id: EMAILJS_SERVICE_ID,
-          template_id: EMAILJS_TEMPLATE_ID,
-          user_id: EMAILJS_PUBLIC_KEY,
-          template_params: {
-            email: recipientEmail,
-            user_name: recipientName || 'Quý khách',
-            otp: generatedOtp,
-            time: expiryTime,
-          },
-        }),
-      });
-    } catch (e) {
-      console.warn('Gửi qua EmailJS không thành công (có thể offline/rate limit):', e);
-    }
-  };
-
   // BƯỚC 1: Xử lý Gửi mã OTP về Email
   const handleSendOtp = async () => {
     if (!email.trim()) {
@@ -100,13 +67,17 @@ export default function ForgotPasswordScreen({ navigation }) {
 
       if (responseData?.otp) {
         setServerOtp(String(responseData.otp));
-        // Gọi gửi email qua EmailJS
-        await sendEmailViaEmailJS(
-          email.trim(),
-          responseData.fullName,
-          responseData.otp,
-          responseData.otpExpiry
-        );
+        // Gọi gửi email qua EmailJS dùng chung
+        try {
+          await sendOtpEmail({
+            recipientEmail: email.trim(),
+            recipientName: responseData.fullName,
+            otp: responseData.otp,
+            otpExpiry: responseData.otpExpiry,
+          });
+        } catch (e) {
+          console.warn('Gửi qua EmailJS không thành công (có thể offline/rate limit):', e);
+        }
       }
 
       setCountdown(60);

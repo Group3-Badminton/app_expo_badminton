@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { THEME } from '../../utils/theme';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { useAuth } from '../../context/AuthContext';
+import { sendOtpEmail } from '../../services/emailService';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function RegisterScreen({ navigation }) {
@@ -25,9 +26,40 @@ export default function RegisterScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState('');
-  const [serverOtp, setServerOtp] = useState('');
+  const [countdown, setCountdown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Đếm ngược gửi lại mã OTP (60s)
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const submitRegisterAndSendOtp = async () => {
+    const cleanEmail = email.trim();
+    const res = await register({
+      fullName: fullName.trim(),
+      phoneNumber: phoneNumber.trim(),
+      email: cleanEmail,
+      password,
+      role: 'Customer',
+    });
+
+    const responseData = res?.data || res;
+    if (!responseData?.otp) {
+      throw new Error('Không nhận được mã OTP từ máy chủ.');
+    }
+
+    // Gửi email thật qua EmailJS REST API giống luồng Web
+    await sendOtpEmail({
+      recipientEmail: cleanEmail,
+      recipientName: responseData.fullName || fullName.trim(),
+      otp: responseData.otp,
+      otpExpiry: responseData.otpExpiry,
+    });
+  };
 
   const handleRegister = async () => {
     if (!fullName.trim() || !phoneNumber.trim() || !email.trim() || !password.trim()) {
@@ -48,20 +80,15 @@ export default function RegisterScreen({ navigation }) {
     try {
       setLoading(true);
       setErrorMessage('');
-      const res = await register({
-        fullName: fullName.trim(),
-        phoneNumber: phoneNumber.trim(),
-        email: email.trim(),
-        password,
-        role: 'Customer',
-      });
+      await submitRegisterAndSendOtp();
 
-      const responseData = res?.data || res;
-      if (responseData?.otp) {
-        setServerOtp(String(responseData.otp));
-      }
+      setCountdown(60);
       // Chuyển sang Bước 2: Nhập mã OTP kích hoạt tài khoản
       setCurrentStep(1);
+      Alert.alert(
+        'Đã gửi mã OTP',
+        `Mã OTP kích hoạt gồm 6 chữ số đã được gửi tới ${email.trim()}. Vui lòng kiểm tra hộp thư (kể cả mục Spam).`
+      );
     } catch (err) {
       const msg =
         err.customMessage ||
@@ -69,6 +96,31 @@ export default function RegisterScreen({ navigation }) {
         err.response?.data?.error ||
         err.message ||
         'Đăng ký tài khoản không thành công. Vui lòng thử lại.';
+      setErrorMessage(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (countdown > 0 || loading) return;
+
+    try {
+      setLoading(true);
+      setErrorMessage('');
+      await submitRegisterAndSendOtp();
+      setCountdown(60);
+      Alert.alert(
+        'Đã gửi lại mã OTP',
+        `Mã OTP mới đã được gửi tới ${email.trim()}. Vui lòng kiểm tra email.`
+      );
+    } catch (err) {
+      const msg =
+        err.customMessage ||
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Không thể gửi lại mã OTP. Vui lòng thử lại.';
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -177,6 +229,7 @@ export default function RegisterScreen({ navigation }) {
                 if (errorMessage) setErrorMessage('');
               }}
               keyboardType="email-address"
+              autoCapitalize="none"
               leftIcon={
                 <Ionicons name="mail-outline" size={20} color={THEME.colors.textMuted} />
               }
@@ -228,16 +281,6 @@ export default function RegisterScreen({ navigation }) {
           </View>
         ) : (
           <View style={styles.formCard}>
-            {serverOtp ? (
-              <View style={styles.otpBanner}>
-                <Ionicons name="key-outline" size={22} color={THEME.colors.primary} />
-                <View style={styles.otpBannerTextWrap}>
-                  <Text style={styles.otpBannerTitle}>Mã OTP của bạn:</Text>
-                  <Text style={styles.otpBannerCode}>{serverOtp}</Text>
-                </View>
-              </View>
-            ) : null}
-
             <Input
               label="Mã xác thực OTP (6 chữ số) *"
               placeholder="••••••"
@@ -259,6 +302,18 @@ export default function RegisterScreen({ navigation }) {
               loading={loading}
               style={styles.submitBtn}
             />
+
+            <View style={styles.resendRow}>
+              {countdown > 0 ? (
+                <Text style={styles.resendWaitText}>
+                  Gửi lại mã sau <Text style={{ fontWeight: '700' }}>{countdown}s</Text>
+                </Text>
+              ) : (
+                <TouchableOpacity onPress={handleResendOtp} disabled={loading}>
+                  <Text style={styles.resendLink}>Chưa nhận được mã? Gửi lại OTP</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             <TouchableOpacity
               onPress={() => {
@@ -344,11 +399,18 @@ const styles = StyleSheet.create({
   },
   otpBannerTextWrap: {
     marginLeft: THEME.spacing.md,
+    flex: 1,
   },
   otpBannerTitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#065F46',
-    fontWeight: '500',
+    fontWeight: '700',
+  },
+  otpBannerHint: {
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+    lineHeight: 17,
   },
   otpBannerCode: {
     fontSize: 20,
@@ -357,11 +419,24 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 2,
   },
+  resendRow: {
+    alignItems: 'center',
+    marginTop: THEME.spacing.md,
+  },
+  resendWaitText: {
+    fontSize: 13,
+    color: THEME.colors.textSecondary,
+  },
+  resendLink: {
+    fontSize: 13,
+    color: THEME.colors.primary,
+    fontWeight: '700',
+  },
   backStepBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: THEME.spacing.lg,
+    marginTop: THEME.spacing.md,
     paddingVertical: THEME.spacing.xs,
   },
   backStepText: {
